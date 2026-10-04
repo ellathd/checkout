@@ -95,10 +95,10 @@
   @keyframes pop { from { transform: scale(.93); } to { transform: scale(1); } }
 
   .photo {
-    position: relative; flex: 0 0 46%; display: grid; place-items: center;
+    position: relative; flex: 0 0 30%; display: grid; place-items: center;
     background: var(--tone, #e9e3d3); border-bottom: 0;
   }
-  .big-icon { font-size: 64px; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.18)); }
+  .big-icon { font-size: 48px; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.18)); }
   .ext {
     position: absolute; left: 12px; top: 12px; background: var(--paper); border: var(--line);
     border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 800; letter-spacing: .5px;
@@ -123,6 +123,15 @@
   .sub .where { display: block; color: var(--muted); font-weight: 500; font-size: 11px; margin-top: 1px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .explain { font-size: 13px; line-height: 1.5; margin: 7px 0 8px; }
+  .facts { list-style: none; margin: 0 0 8px; padding: 7px 9px; background: #fff3cf; border: 2px solid var(--ink);
+    border-radius: 10px; font-size: 12px; line-height: 1.6; }
+  .facts:empty { display: none; }
+  .sorts { display: flex; gap: 6px; }
+  .sorts button { background: transparent; border: 2px solid var(--ink); border-radius: 999px; padding: 4px 10px;
+    font-size: 12px; font-weight: 700; }
+  .sorts button.on { background: var(--ink); color: var(--paper); }
+  #xp-left { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; text-decoration: underline dotted; }
+  .facts li { display: flex; gap: 6px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .chip { border: 2px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; background: #fff; }
   .chip.trash { background: #ffd5d5; }
@@ -238,7 +247,11 @@
           <div class="front">문서</div>
         </button>
       </div>
-      <p style="margin-top:6px">다운로드 폴더를 추천해요.</p>
+      <div class="sorts" id="sorts">
+        <button data-sort="size">📏 큰 파일부터</button>
+        <button data-sort="old">🕰️ 오래된 것부터</button>
+      </div>
+      <p style="margin-top:2px">다운로드 폴더를 추천해요.</p>
       <p id="pick-msg" class="pick-msg"></p>
     </div>
 
@@ -252,7 +265,7 @@
     <div class="view" id="v-card">
       <div class="xp">
         <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
-        <div class="xp-row"><span id="xp-left"></span><span id="xp-right"></span></div>
+        <div class="xp-row"><button id="xp-left" title="정렬 바꾸기"></button><span id="xp-right"></span></div>
       </div>
       <div class="stack">
         <div class="card back" id="card-back"></div>
@@ -269,6 +282,7 @@
             <div class="name display" id="c-name"></div>
             <div class="sub"><span id="c-size"></span><span class="where" id="c-where"></span></div>
             <p class="explain" id="c-explain"></p>
+            <ul class="facts" id="c-facts"></ul>
             <div class="chips" id="c-chips"></div>
             <div class="peek">
               <button id="open-btn" title="기본 앱으로 열기 (스페이스)">👀 열어보기</button>
@@ -306,7 +320,9 @@ const TOKEN = document.querySelector('meta[name="tidy-token"]').content;
 const IS_WIN = document.querySelector('meta[name="platform"]').content === "windows";
 const EXPLORER = IS_WIN ? "탐색기" : "Finder";
 document.querySelectorAll(".explorer").forEach((el) => (el.textContent = EXPLORER));
-const $ = (id) => document.getElementById(id);
+// 앱은 작은 창으로 옮겨가기도 해서, 큰 페이지(document)가 아니라 앱 상자 안에서 찾아요
+const appRoot = document.getElementById("app");
+const $ = (id) => appRoot.querySelector("#" + id) || document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let rootId = null;     // downloads / desktop / documents
 let rootName = "";
@@ -352,7 +368,7 @@ function fmtAge(ms) {
   return Math.floor(days / 365) + "년 전";
 }
 function show(view) {
-  document.querySelectorAll("#app .view").forEach((v) => v.classList.toggle("on", v.id === view));
+  appRoot.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === view));
 }
 let toastTimer;
 function toast(t) {
@@ -379,51 +395,60 @@ const TONE = {
   archive: "#b8ddf2", sheet: "#cfe6a8", design: "#ffe08a", etc: "#e9e3d3",
 };
 const RULES = [
+  // 이름에 중요한 단어가 있으면 확장자보다 먼저 봐요 (포트폴리오 PDF를 영수증 취급하면 안 되니까요)
+  { test: (n) => /포트폴리오|portfolio|이력서|resume|\bcv\b|자기소개서|자소서|경력기술서|경력증명/i.test(n), icon: "⭐", tone: "design", tag: "취업 서류", verdict: "keep",
+    text: "포트폴리오나 이력서 같은 취업 서류예요. 같은 내용의 최신 버전이 따로 있는 게 아니라면 남겨두세요." },
+  { test: (n) => /계약서|증명서|등본|초본|성적|졸업|재학|통장|여권|신분증|자격증|합격|certificate|contract|transcript/i.test(n), icon: "📌", tone: "doc", tag: "중요 서류", verdict: "keep",
+    text: "계약서나 증명서 같은 중요한 서류 같아요. 다시 받기 번거로울 수 있으니 남겨두는 게 좋아요." },
+  { test: (n) => /영수증|receipt|invoice|거래명세|결제|청구서/i.test(n), icon: "🧾", tone: "doc", tag: "영수증", verdict: "check",
+    text: "영수증이나 결제 내역 같아요. 환불·정산이 끝났다면 버려도 돼요." },
+  { test: (n) => /공고|채용|모집|안내문|notice/i.test(n), icon: "📢", tone: "doc", tag: "공고·안내", verdict: "check",
+    text: "공고문이나 안내문 같아요. 지원이나 일정이 끝났다면 버려도 돼요." },
   { test: (n) => /\.(crdownload|download|part)$/i.test(n), icon: "⏳", tone: "etc", tag: "덜 받은 파일", verdict: "trash",
-    text: "다운로드하다 멈춘 파일이에요. 열 수 없는 반쪽짜리라 지워도 돼요." },
+    text: "다운로드하다 멈춘 반쪽짜리 파일이에요. 열리지도 않고, 필요하면 다시 받으면 되니까 지워도 돼요." },
   // 설치 파일은 컴퓨터 종류에 따라 설명이 반대가 돼요
   IS_WIN
     ? { test: (n) => /\.(dmg|pkg)$/i.test(n), icon: "🍎", tone: "install", tag: "맥용", verdict: "trash",
-        text: "맥용 설치 파일이에요. 윈도우에서는 실행할 수 없어요." }
+        text: "맥에서만 쓰는 설치 파일이에요. 윈도우에서는 열 수도 실행할 수도 없어서, 맥으로 옮길 게 아니라면 지워도 돼요." }
     : { test: (n) => /\.(dmg|pkg)$/i.test(n), icon: "📦", tone: "install", tag: "설치 파일", verdict: "trash",
-        text: "맥 앱 설치 파일이에요. 이미 설치했다면 더는 필요 없어요." },
+        text: "맥 앱을 설치할 때 쓰는 파일이에요. 응용 프로그램 폴더에 이미 그 앱이 있다면 더는 필요 없어요. 나중에 다시 필요하면 공식 사이트에서 최신 버전을 받는 게 더 좋아요." },
   IS_WIN
     ? { test: (n) => /\.(exe|msi)$/i.test(n), icon: "📦", tone: "install", tag: "설치 파일", verdict: "check",
-        text: "프로그램 설치 파일이에요. 이미 설치했다면 필요 없지만, 설치 없이 바로 쓰는 프로그램일 수도 있어요." }
+        text: "프로그램 설치 파일이에요. 이미 설치했다면 필요 없어요. 다만 설치 없이 이 파일 자체를 실행해서 쓰는 프로그램일 수도 있으니, 평소 이걸 눌러서 쓰고 있다면 남겨두세요." }
     : { test: (n) => /\.(exe|msi)$/i.test(n), icon: "🪟", tone: "install", tag: "윈도우용", verdict: "trash",
-        text: "윈도우용 설치 파일이에요. 맥에서는 실행할 수 없어요." },
+        text: "윈도우에서만 쓰는 프로그램 파일이에요. 맥에서는 실행할 수 없어서, 윈도우 컴퓨터로 옮길 게 아니라면 지워도 돼요." },
   { test: (n) => /\.(lnk|url)$/i.test(n), icon: "🔗", tone: "etc", tag: "바로가기", verdict: "check",
-    text: "바로가기예요. 지워도 원래 프로그램이나 파일은 그대로 있어요." },
+    text: "프로그램이나 파일로 가는 바로가기예요. 지워도 원래 프로그램이나 파일은 그대로 있어요. 자주 안 쓰는 거라면 지워도 돼요." },
   { test: (n) => /\.(iso|img)$/i.test(n), icon: "💿", tone: "install", tag: "디스크 이미지", verdict: "check",
-    text: "운영체제나 프로그램 설치용 디스크 이미지예요. 보통 아주 커요." },
+    text: "운영체제나 큰 프로그램을 설치할 때 쓰는 디스크 이미지예요. 보통 몇 GB씩 해서 지우면 용량이 확 줄어요. 설치가 끝났다면 대부분 필요 없어요." },
   { test: (n) => /\.apk$/i.test(n), icon: "🤖", tone: "install", tag: "안드로이드 앱", verdict: "trash",
-    text: "안드로이드 앱 설치 파일이에요. 맥에서는 쓸 일이 거의 없어요." },
+    text: "안드로이드 폰에 앱을 설치하는 파일이에요. 컴퓨터에서는 쓸 일이 거의 없어서 지워도 돼요." },
   { test: (n) => /^(스크린샷|Screenshot|Screen Shot)/i.test(n), icon: "📸", tone: "image", tag: "스크린샷", verdict: "check",
-    text: "잠깐 보여주려고 찍은 거라면 지워도 되고, 기록용이라면 남겨두세요." },
+    text: "화면을 찍은 이미지예요. 누군가에게 잠깐 보여주려고 찍은 거라면 지워도 되고, 영수증·예약 내역처럼 기록용이라면 남겨두세요. 열어보기로 바로 확인할 수 있어요." },
   { test: (n) => /^(화면 기록|Screen Recording)/i.test(n), icon: "🎥", tone: "video", tag: "화면 녹화", verdict: "check",
-    text: "화면 녹화 영상이라 용량이 커요. 이미 공유했다면 지워도 될 수 있어요." },
+    text: "화면을 녹화한 영상이에요. 영상이라 용량을 많이 차지해요. 이미 누군가에게 보냈거나 다른 곳에 올렸다면 지워도 돼요." },
   { test: (n) => /\.(zip|rar|7z|tar|gz|tgz)$/i.test(n), icon: "🗜️", tone: "archive", tag: "압축 파일", verdict: "check",
-    text: "이미 풀었다면 같은 내용의 폴더가 옆에 있을 수 있어요." },
+    text: "여러 파일을 하나로 묶은 압축 파일이에요. 이미 풀어서 쓰고 있다면 같은 내용의 폴더가 따로 있을 거예요. 그렇다면 압축 파일은 지워도 돼요." },
   { test: (n) => /\.(mp4|mov|mkv|avi|webm)$/i.test(n), icon: "🎬", tone: "video", tag: "영상", verdict: "check",
-    text: "용량을 많이 차지해요. 클라우드나 휴대폰에도 있다면 지워도 돼요." },
+    text: "영상 파일이에요. 용량을 가장 많이 차지하는 종류예요. 휴대폰이나 클라우드(구글 포토, 드라이브 등)에도 있다면 컴퓨터 속 것은 지워도 돼요." },
   { test: (n) => /\.(mp3|wav|m4a|aac|flac)$/i.test(n), icon: "🎵", tone: "video", tag: "소리", verdict: "check",
-    text: "음악이나 녹음 파일이에요." },
+    text: "음악이나 녹음 파일이에요. 회의·수업 녹음처럼 다시 들을 일이 있다면 남겨두고, 한 번 듣고 끝난 거라면 지워도 돼요." },
   { test: (n) => /\.(jpe?g|png|heic|gif|webp)$/i.test(n), icon: "🖼️", tone: "image", tag: "이미지", verdict: "check",
-    text: "이미지 파일이에요." },
+    text: "이미지 파일이에요. 열어보기로 어떤 사진인지 확인해보세요. 휴대폰이나 클라우드에 같은 사진이 있다면 지워도 돼요." },
   { test: (n) => /\.(psd|ai|fig|sketch)$/i.test(n), icon: "🎨", tone: "design", tag: "디자인 원본", verdict: "keep",
-    text: "나중에 다시 고칠 수 있는 원본이라 남겨두는 게 좋아요." },
+    text: "디자인 작업 원본이에요. 이게 있어야 나중에 다시 고칠 수 있어서 남겨두는 게 좋아요. 완성본(PNG·PDF)만 있으면 수정이 어려워요." },
   { test: (n) => /\.pdf$/i.test(n), icon: "📄", tone: "doc", tag: "PDF", verdict: "check",
-    text: "공고문, 영수증, 강의자료처럼 한 번 보고 끝나는 경우가 많아요." },
+    text: "PDF 문서예요. 이름만으로는 중요한지 알기 어려우니 열어보고 정하세요." },
   { test: (n) => /\.(hwp|hwpx|docx?|pages)$/i.test(n), icon: "📝", tone: "doc", tag: "문서", verdict: "keep",
-    text: "직접 쓴 글일 수 있으니 열어보고 정하세요." },
+    text: "글 문서예요. 직접 쓴 글이라면 다시 쓰기 어려우니 남겨두세요. 남이 보내준 자료나 양식이라면 다시 받을 수 있으니 지워도 돼요." },
   { test: (n) => /\.(pptx?|key)$/i.test(n), icon: "📊", tone: "design", tag: "발표 자료", verdict: "keep",
-    text: "직접 만든 거라면 포트폴리오로 쓸 수 있어요." },
+    text: "발표 자료예요. 직접 만든 거라면 포트폴리오나 다음 발표에 다시 쓸 수 있어서 남겨두는 게 좋아요. 수업·회의에서 받은 자료라면 지워도 돼요." },
   { test: (n) => /\.(xlsx?|csv|numbers)$/i.test(n), icon: "📈", tone: "sheet", tag: "표", verdict: "check",
-    text: "표 데이터예요." },
+    text: "표(엑셀) 파일이에요. 직접 정리한 데이터라면 남겨두고, 어디서 내려받은 자료라면 다시 받을 수 있으니 지워도 돼요." },
   { test: (n) => /\.torrent$/i.test(n), icon: "🧲", tone: "etc", tag: "토렌트", verdict: "trash",
-    text: "다운로드를 시작할 때만 쓰이는 연결 파일이에요." },
+    text: "토렌트로 다운로드를 시작할 때만 쓰는 작은 연결 파일이에요. 다운로드가 끝났다면 필요 없어요." },
   { test: (n) => /\.ics$/i.test(n), icon: "📅", tone: "etc", tag: "캘린더 초대", verdict: "trash",
-    text: "캘린더에 이미 추가했다면 필요 없어요." },
+    text: "캘린더 일정을 담은 초대 파일이에요. 이미 캘린더에 추가했다면 필요 없어요." },
 ];
 const dupKey = (name, size) => name.replace(/ \(\d+\)(?=\.[^.]+$)/, "") + ":" + size;
 
@@ -512,6 +537,20 @@ async function prefetchAI() {
   prefetchAI();
 }
 
+// ---------- 정렬: 큰 파일부터 / 오래된 것부터 ----------
+const SORT_LABEL = { size: "큰 파일부터", old: "오래된 것부터" };
+let sortMode = "size";
+try { if (SORT_LABEL[localStorage.getItem("sort")]) sortMode = localStorage.getItem("sort"); } catch {}
+function sortQueue(list) {
+  return list.sort(sortMode === "old" ? (a, b) => a.mtime - b.mtime : (a, b) => b.size - a.size);
+}
+function setSort(mode) {
+  sortMode = mode;
+  try { localStorage.setItem("sort", mode); } catch {}
+  appRoot.querySelectorAll("#sorts button").forEach((b) => b.classList.toggle("on", b.dataset.sort === mode));
+}
+setSort(sortMode);
+
 // ---------- 폴더 고르기 ----------
 let dupes = new Map();
 async function pickRoot(id, name) {
@@ -534,13 +573,84 @@ async function pickRoot(id, name) {
     if (!dupes.has(key)) dupes.set(key, []);
     dupes.get(key).push(f);
   }
-  queue = files.filter((f) => !isKept(f)).sort((a, b) => b.size - a.size);
+  // 큰 파일부터 보여줘요. 폴더 안에서 몇 번째로 큰지, 전체의 몇 %인지도 계산해둬요
+  const all = [...files].sort((a, b) => b.size - a.size);
+  const totalSize = all.reduce((sum, f) => sum + f.size, 0) || 1;
+  all.forEach((f, i) => { f.rank = i + 1; f.share = f.size / totalSize; });
+  queue = sortQueue(all.filter((f) => !isKept(f)));
   total = queue.length;
   history = [];
   $("undo-btn").disabled = true;
   updateSent();
   await checkAI();
   next();
+}
+
+// ---------- 자세한 정보 (받은 곳 · 받은 날 · 마지막으로 연 날) ----------
+// 받은 곳은 사이트 이름만 서버에서 받아와요. AI에는 보내지 않아요.
+const SITES = [
+  [/docs\.google\.com|googleusercontent/, "구글 문서·슬라이드"],
+  [/drive\.google\.com/, "구글 드라이브"],
+  [/mail\.google\.com/, "지메일"],
+  [/mail\.naver\.com/, "네이버 메일"],
+  [/naver\.com/, "네이버"],
+  [/daum\.net|kakao\.com|kakaocdn/, "카카오·다음"],
+  [/chatgpt\.com|openai\.com/, "ChatGPT"],
+  [/claude\.ai|anthropic\.com/, "Claude"],
+  [/notion\.so|notion\.site/, "노션"],
+  [/figma\.com/, "피그마"],
+  [/canva\.com/, "캔바"],
+  [/slack\.com/, "슬랙"],
+  [/github\.com|githubusercontent/, "GitHub"],
+  [/dropbox\.com/, "드롭박스"],
+  [/youtube\.com/, "유튜브"],
+  [/apple\.com/, "애플"],
+];
+function siteName(hosts) {
+  for (const h of hosts) for (const [re, name] of SITES) if (re.test(h)) return name;
+  return hosts[0] || null;
+}
+const detailCache = new Map();
+async function loadDetails(item) {
+  const key = rootId + "/" + item.rel;
+  if (detailCache.has(key)) return detailCache.get(key);
+  const p = api("/api/details", { root: rootId, rel: item.rel }).catch(() => null);
+  detailCache.set(key, p);
+  return p;
+}
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+async function renderFacts(item) {
+  const list = $("c-facts");
+  list.innerHTML = "";
+  const facts = [];
+  if (item.rank) {
+    const pct = item.share >= 0.01 ? ` · 전체 용량의 ${Math.round(item.share * 100)}%` : "";
+    facts.push(["📏", `${rootName} 폴더에서 ${item.rank}번째로 큰 파일${pct}`]);
+  }
+  const add = () => {
+    list.innerHTML = "";
+    for (const [icon, text] of facts) {
+      const li = document.createElement("li");
+      li.textContent = icon + " " + text;
+      list.append(li);
+    }
+  };
+  add();
+  const d = await loadDetails(item);
+  if (!d || current !== item) return;
+  const site = siteName(d.hosts || []);
+  if (site || d.added) {
+    facts.push(["📥", [site && `${site}에서 받았어요`, d.added && fmtDate(d.added)].filter(Boolean).join(" · ")]);
+  }
+  if (d.lastUsedKnown) {
+    if (d.lastUsed) facts.push(["👀", `마지막으로 연 날: ${fmtAge(d.lastUsed)}`]);
+    else facts.push(["💤", "받은 뒤로 한 번도 안 열었어요"]);
+  }
+  if (d.kind && !hasRule(item)) facts.push(["🏷️", `컴퓨터는 이 파일을 '${d.kind}'(으)로 알고 있어요`]);
+  add();
 }
 
 // ---------- 카드 그리기 ----------
@@ -558,6 +668,7 @@ function render(item) {
   const folder = item.rel.includes("/") ? item.rel.slice(0, item.rel.lastIndexOf("/")) : "";
   $("c-where").textContent = "📂 " + rootName + (folder ? "/" + folder : "");
   $("c-explain").textContent = d.text;
+  renderFacts(item);
   $("c-chips").innerHTML = "";
   for (const c of d.chips) {
     const s = document.createElement("span");
@@ -567,7 +678,7 @@ function render(item) {
   }
   const seen = total - queue.length - 1;
   $("xp-fill").style.width = (total ? (seen / total) * 100 : 0) + "%";
-  $("xp-left").textContent = `${seen + 1} / ${total}장째`;
+  $("xp-left").textContent = `${seen + 1} / ${total}장째 · ${SORT_LABEL[sortMode]} ⇅`;
   $("card-back").style.visibility = queue.length ? "visible" : "hidden";
 }
 
@@ -582,6 +693,7 @@ function next() {
   resetCard(true);
   show("v-card");
   prefetchAI();
+  if (queue[0]) loadDetails(queue[0]);
 }
 
 function setDrag(dx) {
@@ -713,6 +825,15 @@ $("reveal-btn").addEventListener("click", () => peek(true));
 document.querySelectorAll("#folders .folder").forEach((btn) =>
   btn.addEventListener("click", () => pickRoot(btn.dataset.root, btn.querySelector(".front").textContent))
 );
+appRoot.querySelectorAll("#sorts button").forEach((b) => b.addEventListener("click", () => setSort(b.dataset.sort)));
+// 넘기는 중에도 위쪽 "큰 파일부터 ⇅"를 누르면 남은 카드 순서가 바뀌어요
+$("xp-left").addEventListener("click", () => {
+  setSort(sortMode === "size" ? "old" : "size");
+  sortQueue(queue);
+  if (current) render(current);
+  toast(sortMode === "size" ? "📏 남은 카드를 큰 파일부터 보여줄게요" : "🕰️ 남은 카드를 오래된 것부터 보여줄게요");
+  prefetchAI();
+});
 $("again-btn").addEventListener("click", () => show("v-start"));
 $("trash-btn").addEventListener("click", () => decide("trash"));
 $("keep-btn").addEventListener("click", () => decide("keep"));
@@ -736,7 +857,7 @@ $("pip-btn").addEventListener("click", async () => {
   }
   if (pipWin) return;
   try {
-    pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 540 });
+    pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 600 });
   } catch {
     $("pip-msg").textContent = "작은 창을 열지 못했어요.";
     return;

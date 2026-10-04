@@ -12,12 +12,28 @@ const { execFile } = require("child_process");
 const APP = __dirname;
 const DATA = process.argv[2] || path.join(require("os").homedir(), ".checkout");
 const PORT = Number(process.argv[3]) || 5180;
-// Claude 앱을 앞으로 가져오는 명령
-const OPEN_CLAUDE = {
-  darwin: ["open", ["-a", "Claude"]],                       // 맥
-  win32: ["cmd", ["/c", "start", "", "claude://"]],          // 윈도우: Claude 앱 전용 주소
-  linux: ["xdg-open", ["claude://"]],
-};
+// "OK"를 누르면 작업하던 앱으로 돌아가요
+// 훅이 status.json에 남긴 정보(app, entry, term)로 어느 앱인지 골라요
+function returnCommand() {
+  let st = {};
+  try { st = JSON.parse(fs.readFileSync(path.join(DATA, "status.json"), "utf8")); } catch {}
+  const app = /^[A-Za-z0-9.-]+$/.test(st.app || "") ? st.app : "";
+  const where = `${st.entry || ""} ${st.term || ""}`.toLowerCase();
+  const isVSCode = where.includes("vscode");
+  const isDesktop = where.includes("desktop");
+
+  if (process.platform === "darwin") {
+    if (app) return ["open", ["-b", app]];                         // 맥: 실행한 앱 그대로 (VS Code, 터미널, Claude 앱…)
+    if (isVSCode) return ["open", ["-b", "com.microsoft.VSCode"]];
+    return ["open", ["-a", "Claude"]];
+  }
+  if (process.platform === "win32") {
+    if (isVSCode) return ["cmd", ["/c", "start", "", "vscode://"]];   // 윈도우 VS Code
+    if (isDesktop) return ["cmd", ["/c", "start", "", "claude://"]];  // 윈도우 Claude 앱
+    return null;                                                     // 터미널은 앞으로 가져올 방법이 없어요 (알림만 닫혀요)
+  }
+  return isDesktop ? ["xdg-open", ["claude://"]] : null;
+}
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -53,7 +69,9 @@ const server = http.createServer((req, res) => {
 
   // 돌아가요: Claude 앱 열기 (OS마다 방법이 달라요)
   if (url.pathname === "/api/return" && req.method === "POST") {
-    const [cmd, args] = OPEN_CLAUDE[process.platform] || OPEN_CLAUDE.linux;
+    const command = returnCommand();
+    if (!command) { res.writeHead(204); res.end(); return; }
+    const [cmd, args] = command;
     execFile(cmd, args, { windowsHide: true }, (err) => {
       res.writeHead(err ? 500 : 204);
       res.end();

@@ -6,5 +6,14 @@ DATA="${CHECKOUT_DATA:-$HOME/.checkout}"
 mkdir -p "$DATA"
 STATE="$1"
 AT="$(date +%s)000"
-printf '{"state":"%s","at":%s}\n' "$STATE" "$AT" > "$DATA/status.json.tmp" && mv "$DATA/status.json.tmp" "$DATA/status.json"
+
+# "OK"를 눌렀을 때 돌아갈 앱을 기억해요
+#  - 맥: Claude Code를 실행한 앱 표시 (예: com.microsoft.VSCode, com.apple.Terminal, com.anthropic.claudefordesktop)
+#  - 어디서 실행됐는지 (예: claude-desktop, claude-vscode, cli)
+# 따옴표 같은 특수문자는 빼고 기록해요
+APP="$(printf '%s' "${__CFBundleIdentifier:-}" | tr -cd 'A-Za-z0-9.-')"
+ENTRY="$(printf '%s' "${CLAUDE_CODE_ENTRYPOINT:-}" | tr -cd 'A-Za-z0-9._-')"
+TERM_APP="$(printf '%s' "${TERM_PROGRAM:-}" | tr -cd 'A-Za-z0-9._-')"
+
+printf '{"state":"%s","at":%s,"app":"%s","entry":"%s","term":"%s"}\n' "$STATE" "$AT" "$APP" "$ENTRY" "$TERM_APP" > "$DATA/status.json.tmp" && mv "$DATA/status.json.tmp" "$DATA/status.json"
 exit 0

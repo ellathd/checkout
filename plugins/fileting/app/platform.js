@@ -20,6 +20,10 @@ async function freePath(p) {
     if (!(await exists(candidate))) return candidate;
   }
 }
+// 주소에서 사이트 이름만 꺼내요 (주소 안의 토큰 같은 건 밖으로 안 나가게)
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return null; }
+}
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, { maxBuffer: 1e6, windowsHide: true, ...opts }, (err, stdout, stderr) =>
@@ -82,6 +86,31 @@ const mac = {
 
   open(abs, reveal) {
     return run("/usr/bin/open", reveal ? ["-R", abs] : [abs]);
+  },
+
+  // 맥이 파일마다 적어두는 정보(Spotlight): 어디서 받았는지, 언제 받았는지, 마지막으로 언제 열었는지
+  async details(abs) {
+    const xml = await run("/usr/bin/mdls", [
+      "-plist", "-",
+      "-name", "kMDItemWhereFroms", "-name", "kMDItemLastUsedDate",
+      "-name", "kMDItemDateAdded", "-name", "kMDItemKind",
+      abs,
+    ], { timeout: 5000 }).catch(() => "");
+    const unescape = (s) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    const date = (key) => {
+      const m = new RegExp("<key>" + key + "</key>\\s*<date>([^<]+)</date>").exec(xml);
+      return m ? Date.parse(m[1]) : null;
+    };
+    const froms = /<key>kMDItemWhereFroms<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(xml);
+    const urls = froms ? [...froms[1].matchAll(/<string>([^<]*)<\/string>/g)].map((m) => unescape(m[1])) : [];
+    const kind = /<key>kMDItemKind<\/key>\s*<string>([^<]*)<\/string>/.exec(xml);
+    return {
+      hosts: [...new Set(urls.map(hostOf).filter(Boolean))],
+      added: date("kMDItemDateAdded"),
+      lastUsed: date("kMDItemLastUsedDate"),
+      lastUsedKnown: !!xml, // 맥은 기록이 없으면 "받은 뒤 안 열었다"는 뜻이에요
+      kind: kind ? unescape(kind[1]) : null,
+    };
   },
 
   openBrowser(url) {
@@ -201,6 +230,22 @@ const win = {
       const arg = reveal ? `/select,"${abs}"` : `"${abs}"`;
       execFile("explorer.exe", [arg], { windowsVerbatimArguments: true, windowsHide: true }, () => resolve());
     });
+  },
+
+  // 인터넷에서 받은 파일에 붙는 Zone.Identifier 꼬리표에서 받은 곳을 읽어요
+  async details(abs) {
+    let zone = "";
+    try { zone = await fsp.readFile(abs + ":Zone.Identifier", "utf8"); } catch {}
+    const get = (k) => (new RegExp("^" + k + "=(.+)", "m").exec(zone) || [])[1];
+    let added = null;
+    try { added = (await fsp.stat(abs)).birthtimeMs || null; } catch {}
+    return {
+      hosts: [...new Set([get("ReferrerUrl"), get("HostUrl")].map((u) => u && hostOf(u.trim())).filter(Boolean))],
+      added,
+      lastUsed: null,
+      lastUsedKnown: false, // 윈도우는 "마지막으로 연 날"을 믿을 만하게 기록하지 않아요
+      kind: null,
+    };
   },
 
   openBrowser(url) {

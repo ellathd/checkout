@@ -430,15 +430,10 @@ function startPolling(win) {
   pollTimer = win.setInterval(pollStatus, 1500);
 }
 
-// "돌아가요"를 누르면 Claude 앱을 앞으로 불러와요
-// 로컬 서버(server.js)에게 부탁해요. 작은 창 안에서 claude:// 를 열면 크롬이 작은 창을 닫아버려서요
+// "OK"를 누르면 작업하던 앱(Claude 앱, VS Code, 터미널…)으로 돌아가요
+// 로컬 서버(server.js)에게 부탁해요. 작은 창 안에서 앱 주소를 열면 크롬이 작은 창을 닫아버려서요
 async function goBackToClaude() {
-  try {
-    const res = await fetch("/api/return", { method: "POST" });
-    if (res.ok) return;
-  } catch {}
-  // 서버가 못 열면 원래 탭에서 Claude 앱 주소를 열어요 (크롬이 한 번 물어볼 수 있어요)
-  window.location.href = "claude://";
+  try { await fetch("/api/return", { method: "POST" }); } catch {}
 }
 
 // 알림 띠를 누르면 닫기 (작업 끝·확인 필요 띠는 Claude 앱도 열기)

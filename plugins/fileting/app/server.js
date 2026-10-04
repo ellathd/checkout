@@ -250,6 +250,12 @@ async function handle(req, res) {
     }
   }
 
+  if (url.pathname === "/api/details") {
+    const abs = resolveInRoot(body.root, body.rel);
+    if (!abs || !(await exists(abs))) return send(res, 404, { error: "파일이 없어요" });
+    return send(res, 200, await platform.details(abs));
+  }
+
   if (url.pathname === "/api/explain") {
     const files = Array.isArray(body.files) ? body.files.slice(0, 20) : [];
     if (!files.length) return send(res, 400, { error: "물어볼 파일이 없어요" });
