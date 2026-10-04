@@ -48,12 +48,13 @@ const CAT_PIXELS = [
   ".kkkwwwwwwkkk.",
   "..kkkwwwwkkk..",
 ];
-const CAT_COLORS = { k: "#1d1d1f", w: "#f6f6f2", y: "#c8d860", p: "#e89aa8" };
-function pixelCat(size = 28) {
+const CAT_COLORS = { k: "#1d1d1f", w: "#f6f6f2", y: "#c8d860", p: "#e89aa8" };          // 턱시도
+const GINGER_COLORS = { k: "#f0a35e", w: "#fff1df", y: "#7fc96b", p: "#f29aa6" };      // 치즈 고양이
+function pixelCat(size = 28, colors = CAT_COLORS) {
   const w = CAT_PIXELS[0].length, h = CAT_PIXELS.length;
   let rects = "";
   CAT_PIXELS.forEach((row, y) => [...row].forEach((ch, x) => {
-    if (CAT_COLORS[ch]) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${CAT_COLORS[ch]}"/>`;
+    if (colors[ch]) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${colors[ch]}"/>`;
   }));
   return `<svg class="pixel-cat" width="${size}" height="${Math.round(size * h / w)}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
 }
@@ -70,8 +71,22 @@ function titleBar(title) {
   </div>`;
 }
 
+// 편집기 아래쪽을 빈 줄 번호로 채우기 (넘치는 줄은 잘려요)
+function emptyLines(from, to) {
+  let s = "";
+  for (let n = from; n <= to; n++) s += `<span class="ln">${n}</span><span></span>`;
+  return s;
+}
+
+// 맨 아래 상태 표시줄: AI 한 줄 (작업 중엔 그 자리에 Calculating… 막대가 겹쳐요)
+function statusBar() {
+  if (!issue.aiLine) return `<div class="xp-status"><span class="pane grow">checkout.exe</span></div>`;
+  return `<a class="xp-status" href="${issue.aiLine.source.url}" target="_blank" rel="noopener"><span class="pane">AI 한 줄</span><span class="pane grow">${issue.aiLine.text}</span></a>`;
+}
+
 // 머리기사를 코드 한 줄처럼
 function codeLine(title) {
+  title = title.replace(/-/g, "\u2011");
   return `<span class="kw">const</span> <span class="var">오늘</span> = <span class="str">"${title}"</span>;`;
 }
 
@@ -107,6 +122,8 @@ function coverHTML() {
           <span class="ln">1</span><span class="cmt">// ${issue.section || "AI WORLD"} · 머리기사</span>
           <span class="ln">2</span><span class="code">${codeLine(lead.title)}</span>
           <span class="ln">3</span><span class="code"><span class="fn">open</span>(<span class="var">오늘</span>); <span class="cmt">// 읽기 →</span></span>
+          ${emptyLines(4, 16)}
+          <span class="editor-cat" aria-hidden="true"><span class="cat-spin"></span>${pixelCat(64, GINGER_COLORS)}</span>
           ${stamp(lead)}
         </button>
 
@@ -119,7 +136,7 @@ function coverHTML() {
           <span class="cp-go">↗</span>
         </a>` : ""}
       </div>
-      ${issue.aiLine ? `<a class="xp-status" href="${issue.aiLine.source.url}" target="_blank" rel="noopener"><span class="pane">AI 한 줄</span><span class="pane grow">${issue.aiLine.text}</span></a>` : ""}
+      ${statusBar()}
     </section>`;
 }
 
@@ -173,6 +190,7 @@ function readerHTML() {
           ${footBtn}
         </div>
       </div>
+      ${statusBar()}
     </section>`;
 }
 
@@ -353,9 +371,11 @@ function showStatus(s, isFirst) {
   if (s.state === "working") {
     workStart = s.at;
     miniState = "working";
+    mag.classList.add("working");
     statusEl.innerHTML = `<div class="xp-progress"><span class="spinner" aria-hidden="true"></span><span class="calc">Calculating…</span><div class="xp-bar"><i></i></div></div>`;
     setTitle("⏳ 작업 중");
   } else if (s.state === "done") {
+    mag.classList.remove("working");
     // 창을 막 연 순간의 지난 "끝남"은 보여주지 않아요
     if (isFirst) { statusEl.innerHTML = ""; return; }
     const isShort = workStart && s.at - workStart < QUIET_MS;
@@ -369,6 +389,7 @@ function showStatus(s, isFirst) {
     if (autoHide) mag.ownerDocument.defaultView.clearTimeout(autoHide);
     if (isShort) autoHide = mag.ownerDocument.defaultView.setTimeout(clearDone, AUTO_HIDE_MS);
   } else if (s.state === "waiting") {
+    mag.classList.remove("working");
     if (isFirst) return;
     miniState = "waiting";
     statusEl.innerHTML = dialogHTML("claude.exe", "claude가 확인을 기다려요", "허락이나 답이 필요해요", "가보기");
