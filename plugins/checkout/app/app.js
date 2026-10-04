@@ -50,10 +50,10 @@ const CAT_PIXELS = [
 ];
 const CAT_COLORS = { k: "#1d1d1f", w: "#f6f6f2", y: "#c8d860", p: "#e89aa8" };          // 턱시도
 const GINGER_COLORS = { k: "#f0a35e", w: "#fff1df", y: "#7fc96b", p: "#f29aa6" };      // 치즈 고양이
-function pixelCat(size = 28, colors = CAT_COLORS) {
-  const w = CAT_PIXELS[0].length, h = CAT_PIXELS.length;
+function pixelCat(size = 28, colors = CAT_COLORS, pixels = CAT_PIXELS) {
+  const w = pixels[0].length, h = pixels.length;
   let rects = "";
-  CAT_PIXELS.forEach((row, y) => [...row].forEach((ch, x) => {
+  pixels.forEach((row, y) => [...row].forEach((ch, x) => {
     if (colors[ch]) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${colors[ch]}"/>`;
   }));
   return `<svg class="pixel-cat" width="${size}" height="${Math.round(size * h / w)}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
@@ -69,6 +69,15 @@ function titleBar(title) {
       <button class="xp-btn close" data-close aria-label="닫기" title="닫기">×</button>
     </span>
   </div>`;
+}
+
+// 맥 로딩 표시 같은 12개 막대 스피너
+function spinnerSVG() {
+  let bars = "";
+  for (let i = 0; i < 12; i++) {
+    bars += `<rect x="11" y="1" width="2" height="6" rx="1" fill="#fff" opacity="${(0.25 + (i / 11) * 0.75).toFixed(2)}" transform="rotate(${i * 30} 12 12)"/>`;
+  }
+  return `<svg viewBox="0 0 24 24" width="100%" height="100%">${bars}</svg>`;
 }
 
 // 편집기 아래쪽을 빈 줄 번호로 채우기 (넘치는 줄은 잘려요)
@@ -123,7 +132,7 @@ function coverHTML() {
           <span class="ln">2</span><span class="code">${codeLine(lead.title)}</span>
           <span class="ln">3</span><span class="code"><span class="fn">open</span>(<span class="var">오늘</span>); <span class="cmt">// 읽기 →</span></span>
           ${emptyLines(4, 16)}
-          <span class="editor-cat" aria-hidden="true"><span class="cat-spin"></span>${pixelCat(64, GINGER_COLORS)}</span>
+          <span class="editor-cat" aria-hidden="true"><img src="images/cat-loading.jpg" alt="" /><span class="cat-spin">${spinnerSVG()}</span></span>
           ${stamp(lead)}
         </button>
 

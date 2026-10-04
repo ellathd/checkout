@@ -130,10 +130,17 @@ a { color: inherit; }
 .editor .fn { color: var(--ed-fn); }
 .editor .str { color: var(--ed-str); font-size: 21px; font-weight: 700; line-height: 1.35; }
 /* 편집기에 앉아 있는 픽셀 고양이 — 작업 중이면 머리 위에 로딩 표시 */
-.editor-cat { position: absolute; right: 10px; bottom: -4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* 편집기 오른쪽 아래 둥근 웹캠 속 고양이 (사용자가 AI로 만든 사진) */
+.editor-cat {
+  position: absolute; right: 10px; bottom: 10px; width: 96px; height: 96px; line-height: 0;
+  border-radius: 50%; overflow: hidden; border: 3px solid #3a3a3a; box-shadow: 0 0 0 1px #555;
+}
+.editor-cat img { width: 100%; height: 100%; object-fit: cover; }
+/* 작업 중이면 이마의 로딩 표시가 진짜로 돌아요 (사진 속 멈춘 표시를 털 색으로 덮고 그 위에서) */
 .cat-spin {
-  width: 18px; height: 18px; border-radius: 50%; border: 3px dotted #e8e8e8;
-  visibility: hidden; animation: spin 0.9s steps(8) infinite;
+  position: absolute; left: 50%; top: 29.5%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  border-radius: 50%; background: radial-gradient(circle, #8a857c 55%, rgba(138,133,124,0) 72%);
+  visibility: hidden; animation: spin 1s steps(12) infinite;
 }
 .mag.working .cat-spin { visibility: visible; }
 .editor:hover .ln { color: #c6c6c6; }
