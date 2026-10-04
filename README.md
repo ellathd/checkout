@@ -25,6 +25,12 @@ Claude Code에서 두 줄을 입력해요.
 
 설치한 뒤 **새 세션**을 열면 Checkout 서버가 자동으로 켜져요.
 
+### VS Code 확장이나 터미널(CLI)에서 쓴다면
+
+- 설치 명령은 **터미널에서 `claude`를 실행한 다음** 위 두 줄을 입력해요. 한 번 설치하면 VS Code 확장에서도 같이 적용돼요.
+- 비공개 저장소라면 먼저 `gh auth login`으로 GitHub에 로그인해 두세요.
+- 작업이 끝나고 **OK**를 누르면 Claude를 실행한 앱(VS Code, 터미널, iTerm 등)이 앞으로 나와요. 윈도우에서는 VS Code와 Claude 앱만 앞으로 가져올 수 있고, 터미널은 알림만 닫혀요.
+
 ## 쓰는 법
 
 1. Claude Code에서 `/checkout:open` 을 입력해요. (또는 크롬에서 `http://localhost:5180`)
