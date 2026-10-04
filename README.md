@@ -11,9 +11,15 @@ Claude Code에 일을 시켜두고 다른 창에서 딴짓하고 있으면, 작�
 - **Node.js** — 없으면 설치 후 `/checkout:setup`이 설치를 도와줘요
 - 지금은 **맥**에서 확인됐어요. 윈도우는 테스트 중이에요.
 
-## 설치
+## 설치 (한 줄)
 
-Claude Code에서 두 줄을 입력해요.
+터미널에 이 한 줄을 붙여넣어요.
+
+```bash
+claude plugin marketplace add ellathd/checkout && claude plugin install checkout@checkout-market
+```
+
+터미널에서 `claude` 명령이 안 되면(데스크톱 앱만 쓰는 경우), Claude Code 대화창에 두 줄을 차례로 입력해도 돼요.
 
 ```
 /plugin marketplace add ellathd/checkout
@@ -27,8 +33,7 @@ Claude Code에서 두 줄을 입력해요.
 
 ### VS Code 확장이나 터미널(CLI)에서 쓴다면
 
-- 설치 명령은 **터미널에서 `claude`를 실행한 다음** 위 두 줄을 입력해요. 한 번 설치하면 VS Code 확장에서도 같이 적용돼요.
-- 비공개 저장소라면 먼저 `gh auth login`으로 GitHub에 로그인해 두세요.
+- 위 한 줄 설치를 터미널에서 하면 돼요. 한 번 설치하면 VS Code 확장에서도 같이 적용돼요.
 - 작업이 끝나고 **OK**를 누르면 Claude를 실행한 앱(VS Code, 터미널, iTerm 등)이 앞으로 나와요. 윈도우에서는 VS Code와 Claude 앱만 앞으로 가져올 수 있고, 터미널은 알림만 닫혀요.
 
 ## 쓰는 법
@@ -45,7 +50,7 @@ Claude Code에서 두 줄을 입력해요.
 AI가 일하는 동안 다운로드 폴더 파일이랑 소개팅해요. 작은 창에서 파일을 한 장씩 보고 버릴지 남길지 정해요.
 
 ```
-/plugin install fileting@checkout-market
+claude plugin install fileting@checkout-market
 ```
 
 설치한 뒤 `/fileting:open` 을 입력해요.
