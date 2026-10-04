@@ -1,0 +1,29 @@
+{
+  "name": "fileting",
+  "version": "0.2.0",
+  "description": "AI가 일하는 동안 파일이랑 소개팅해요. 다운로드 폴더 파일을 한 장씩 보고 버릴지 정하는 작은 창 앱.",
+  "bin": {
+    "fileting": "bin/fileting.js"
+  },
+  "files": [
+    "bin/",
+    "server.js",
+    "platform.js",
+    "index.html"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "win32"
+  ],
+  "keywords": [
+    "cleanup",
+    "downloads",
+    "pip",
+    "claude-code",
+    "codex"
+  ],
+  "license": "MIT"
+}

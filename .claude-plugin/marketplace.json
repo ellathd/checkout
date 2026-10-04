@@ -1,0 +1,21 @@
+{
+  "name": "checkout-market",
+  "owner": {
+    "name": "Checkout"
+  },
+  "plugins": [
+    {
+      "name": "checkout",
+      "source": "./plugins/checkout",
+      "description": "AI 기다리는 동안 읽는 개발자 신문. Claude Code 작업이 끝나면 작은 창으로 알려줘요."
+    },
+    {
+      "name": "fileting",
+      "source": "./plugins/fileting",
+      "description": "AI가 일하는 동안 파일이랑 소개팅해요. 다운로드 폴더 파일을 작은 창에서 한 장씩 보고 버릴지 정해요."
+    }
+  ],
+  "metadata": {
+    "description": "Checkout — AI 기다리는 동안 읽는 개발자 신문"
+  }
+}

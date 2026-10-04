@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>파일팅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  :root {
+    --bg: #f6b81a;
+    --on-bg: #161412;
+    --ink: #161412;
+    --paper: #fffbf0;
+    --muted: #6b645a;
+    --trash: #e5484d;
+    --keep: #1f9d62;
+    --line: 2.5px solid var(--ink);
+    --shadow: 4px 4px 0 var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #211c12; --on-bg: #fff1c9; }
+  }
+  :root[data-theme="dark"] { --bg: #211c12; --on-bg: #fff1c9; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--on-bg);
+    font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", sans-serif;
+  }
+  .display { font-family: "Black Han Sans", "Pretendard", sans-serif; font-weight: 400; }
+  .page { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+  .page h1 { font-size: 32px; margin: 0 0 6px; }
+  .page .sub { font-size: 14px; margin: 0 0 18px; line-height: 1.55; opacity: .85; }
+  .pip-row { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  .pip-msg { font-size: 13px; opacity: .8; }
+
+  button { font: inherit; color: var(--ink); cursor: pointer; }
+  .pill {
+    background: var(--paper); border: var(--line); border-radius: 999px;
+    padding: 8px 14px; font-weight: 700; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .pill:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .pill:disabled { opacity: .45; cursor: default; }
+
+  /* ---------- 작은 창으로 옮겨가는 앱 ---------- */
+  #app {
+    position: relative; background: #f6b81a; border: var(--line); border-radius: 28px;
+    height: 540px; display: flex; flex-direction: column; overflow: hidden; color: var(--ink);
+  }
+  .pip-body { margin: 0; }
+  .pip-body #app { height: 100vh; border: 0; border-radius: 0; }
+
+  .top { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px 6px; }
+  .logo { font-size: 20px; letter-spacing: -.5px; }
+  .logo span { color: var(--trash); }
+
+  /* 폴더 모양 정리함 */
+  .bin {
+    position: relative; background: var(--paper); border: var(--line);
+    border-radius: 0 10px 10px 10px; padding: 5px 10px 4px; font-size: 12px; font-weight: 800;
+    margin-top: 8px; box-shadow: 3px 3px 0 var(--ink);
+  }
+  .bin::before {
+    content: ""; position: absolute; left: -2.5px; top: -10px; width: 26px; height: 10px;
+    background: var(--paper); border: var(--line); border-bottom: 0; border-radius: 6px 6px 0 0;
+  }
+  .bin.full { background: #ffc2d1; }
+  .bin.full::before { background: #ffc2d1; }
+  .bin:disabled { cursor: default; }
+
+  /* 경험치 바 */
+  .xp { padding: 2px 14px 8px; font-size: 11px; font-weight: 700; }
+  .xp-bar { height: 12px; border: var(--line); border-radius: 999px; background: var(--paper); overflow: hidden; }
+  .xp-fill { height: 100%; width: 0; background: var(--ink); border-radius: 999px; transition: width .3s; }
+  .xp-row { display: flex; justify-content: space-between; margin-top: 3px; }
+
+  .view { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .view.on { display: flex; }
+  .center { justify-content: center; align-items: center; text-align: center; gap: 14px; padding: 16px; }
+  .center p { margin: 0; font-size: 14px; line-height: 1.55; font-weight: 600; }
+  .hero { font-size: 26px; line-height: 1.2; }
+
+  /* ---------- 카드 더미 ---------- */
+  .stack { position: relative; flex: 1; margin: 0 16px; min-height: 0; }
+  .card {
+    position: absolute; inset: 0; background: var(--paper); border: var(--line); border-radius: 22px;
+    box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+    touch-action: none; user-select: none; cursor: grab; will-change: transform;
+  }
+  .card:active { cursor: grabbing; }
+  .card.back { transform: rotate(-3deg) translateY(6px); background: #fff1c9; cursor: default; }
+  .card.enter { animation: pop .22s ease-out; }
+  @keyframes pop { from { transform: scale(.93); } to { transform: scale(1); } }
+
+  .photo {
+    position: relative; flex: 0 0 46%; display: grid; place-items: center;
+    background: var(--tone, #e9e3d3); border-bottom: 0;
+  }
+  .big-icon { font-size: 64px; filter: drop-shadow(3px 3px 0 rgba(0,0,0,.18)); }
+  .ext {
+    position: absolute; left: 12px; top: 12px; background: var(--paper); border: var(--line);
+    border-radius: 8px; padding: 2px 8px; font-size: 11px; font-weight: 800; letter-spacing: .5px;
+  }
+  .badge {
+    position: absolute; right: 12px; bottom: 18px; width: 50px; height: 50px; border-radius: 50%;
+    border: var(--line); background: var(--paper); display: grid; place-items: center; font-size: 22px;
+  }
+  /* 물결 경계 */
+  .scallop {
+    height: 14px; margin-top: -14px; position: relative;
+    background:
+      radial-gradient(circle at 50% 100%, var(--paper) 7px, var(--ink) 7.5px, var(--ink) 9.5px, transparent 10px)
+      0 0 / 20px 14px repeat-x;
+  }
+  .info { flex: 1; padding: 6px 14px 12px; overflow: auto; min-height: 0; }
+  .name {
+    font-size: 21px; line-height: 1.15; word-break: break-all;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .sub { font-size: 13px; font-weight: 700; margin: 3px 0 0; }
+  .sub .where { display: block; color: var(--muted); font-weight: 500; font-size: 11px; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .explain { font-size: 13px; line-height: 1.5; margin: 7px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { border: 2px solid var(--ink); border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; background: #fff; }
+  .chip.trash { background: #ffd5d5; }
+  .chip.keep { background: #c9efd9; }
+  .chip.check { background: #ffe9a8; }
+  .peek { display: flex; gap: 6px; margin-top: 9px; }
+  .peek button {
+    flex: 1; background: #fff; border: 2px solid var(--ink); border-radius: 10px;
+    padding: 5px 0; font-size: 12px; font-weight: 700; box-shadow: 2px 2px 0 var(--ink);
+  }
+  .peek button:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+
+  /* 넘길 때 찍히는 도장 */
+  .stamp {
+    position: absolute; top: 18px; z-index: 2; padding: 4px 12px; border: 3.5px solid; border-radius: 10px;
+    font-size: 24px; opacity: 0; background: var(--paper); pointer-events: none;
+  }
+  .stamp.s-trash { right: 14px; color: var(--trash); transform: rotate(12deg); }
+  .stamp.s-keep { left: 14px; color: var(--keep); transform: rotate(-12deg); }
+
+  /* 동그란 버튼 */
+  .actions { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 14px 0 10px; }
+  .round {
+    width: 62px; height: 62px; border-radius: 50%; border: var(--line); background: var(--paper);
+    box-shadow: 3px 3px 0 var(--ink); font-size: 26px; display: grid; place-items: center;
+  }
+  .round.small { width: 44px; height: 44px; font-size: 18px; }
+  .round.r-trash { background: #ffd5d5; }
+  .round.r-keep { background: #c9efd9; }
+  .round:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .round:disabled { opacity: .4; cursor: default; }
+
+  .toast {
+    position: absolute; left: 50%; top: 52px; transform: translate(-50%, -8px); z-index: 5;
+    background: var(--ink); color: var(--paper); border-radius: 999px; padding: 6px 14px;
+    font-size: 12px; font-weight: 700; white-space: nowrap; opacity: 0; transition: .2s; pointer-events: none;
+    max-width: 92%; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .keys { text-align: center; font-size: 10px; font-weight: 700; padding-bottom: 8px; opacity: .7; }
+
+  /* 시작 · 끝 화면의 폴더 일러스트 */
+  .folder { position: relative; width: 150px; height: 104px; margin-top: 26px; }
+  .folder .tab {
+    position: absolute; left: 0; top: -14px; width: 56px; height: 18px; background: var(--f, #ffc2d1);
+    border: var(--line); border-bottom: 0; border-radius: 10px 10px 0 0;
+  }
+  .folder .papers { position: absolute; left: 22px; right: 22px; top: -30px; height: 60px; }
+  .folder .papers span {
+    position: absolute; width: 50px; height: 60px; background: var(--paper); border: var(--line);
+    border-radius: 6px; display: grid; place-items: center; font-size: 22px;
+  }
+  .folder .papers span:nth-child(1) { left: 0; transform: rotate(-12deg); }
+  .folder .papers span:nth-child(2) { left: 28px; top: -8px; transform: rotate(3deg); }
+  .folder .papers span:nth-child(3) { right: 0; transform: rotate(14deg); }
+  .folder .front {
+    position: absolute; inset: 0; background: var(--f, #ffc2d1); border: var(--line);
+    border-radius: 0 14px 14px 14px; box-shadow: var(--shadow);
+    display: grid; place-items: center; font-weight: 800; font-size: 13px;
+  }
+
+
+  .pick-msg:empty { display: none; }
+  .pick-msg { background: var(--paper); border: var(--line); border-radius: 12px; padding: 8px 10px;
+    font-size: 12px !important; line-height: 1.5; text-align: left; box-shadow: 3px 3px 0 var(--ink); }
+
+  /* 시작 화면의 폴더 버튼 */
+  .folders { display: flex; gap: 14px; margin-top: 24px; }
+  button.folder { background: none; border: 0; padding: 0; width: 84px; height: 62px; margin-top: 0; }
+  button.folder .front { font-size: 12px; }
+  button.folder .papers { left: 14px; right: 14px; top: -18px; height: 40px; transition: transform .15s; }
+  button.folder .papers span { width: 32px; height: 40px; font-size: 15px; }
+  button.folder .papers span:nth-child(2) { left: 14px; top: -5px; }
+  button.folder:hover .papers { transform: translateY(-6px); }
+  button.folder:active .front { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  button.folder .tab { width: 34px; top: -11px; height: 14px; }
+</style>
+<meta name="tidy-token" content="__TIDY_TOKEN__" />
+<meta name="platform" content="__PLATFORM__" />
+</head>
+<body>
+<div class="page">
+  <h1 class="display">파일팅</h1>
+  <p class="sub">AI가 일하는 동안 파일이랑 소개팅해요.<br />왼쪽으로 넘기면 <b>버리기</b>, 오른쪽으로 넘기면 <b>남기기</b>.<br />버린 파일은 <b>휴지통</b>으로 가요. ↩ 버튼으로 바로 꺼내올 수도 있어요.</p>
+  <div class="pip-row">
+    <button class="pill" id="pip-btn">작은 창으로 띄우기 ↗</button>
+    <span class="pip-msg" id="pip-msg"></span>
+  </div>
+
+  <div id="app">
+    <div class="top">
+      <div class="logo display">파일<span>♥</span>팅</div>
+      <span class="bin" id="bin-chip" title="이번에 휴지통으로 보낸 용량">🗑 0 B</span>
+    </div>
+
+    <!-- 시작 -->
+    <div class="view center on" id="v-start">
+      <div class="hero display">오늘은 누구를<br />정리해볼까요?</div>
+      <div class="folders" id="folders">
+        <button class="folder" data-root="downloads" style="--f:#b8ddf2">
+          <div class="tab"></div>
+          <div class="papers"><span>📦</span><span>📄</span><span>🗜️</span></div>
+          <div class="front">다운로드</div>
+        </button>
+        <button class="folder" data-root="desktop" style="--f:#ffc2d1">
+          <div class="tab"></div>
+          <div class="papers"><span>📸</span><span>🖼️</span><span>📝</span></div>
+          <div class="front">데스크탑</div>
+        </button>
+        <button class="folder" data-root="documents" style="--f:#b9d8c2">
+          <div class="tab"></div>
+          <div class="papers"><span>📝</span><span>📊</span><span>📈</span></div>
+          <div class="front">문서</div>
+        </button>
+      </div>
+      <p style="margin-top:6px">다운로드 폴더를 추천해요.</p>
+      <p id="pick-msg" class="pick-msg"></p>
+    </div>
+
+    <!-- 훑는 중 -->
+    <div class="view center" id="v-scan">
+      <div class="big-icon">🔍</div>
+      <p id="scan-msg">파일들 프로필 보는 중…</p>
+    </div>
+
+    <!-- 카드 -->
+    <div class="view" id="v-card">
+      <div class="xp">
+        <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+        <div class="xp-row"><span id="xp-left"></span><span id="xp-right"></span></div>
+      </div>
+      <div class="stack">
+        <div class="card back" id="card-back"></div>
+        <div class="card" id="card">
+          <div class="stamp s-trash display">다음에…</div>
+          <div class="stamp s-keep display">매칭!</div>
+          <div class="photo" id="c-photo">
+            <span class="ext" id="c-ext"></span>
+            <div class="big-icon" id="c-icon"></div>
+            <div class="badge" id="c-badge"></div>
+          </div>
+          <div class="scallop"></div>
+          <div class="info">
+            <div class="name display" id="c-name"></div>
+            <div class="sub"><span id="c-size"></span><span class="where" id="c-where"></span></div>
+            <p class="explain" id="c-explain"></p>
+            <div class="chips" id="c-chips"></div>
+            <div class="peek">
+              <button id="open-btn" title="기본 앱으로 열기 (스페이스)">👀 열어보기</button>
+              <button id="reveal-btn" title="이 파일 위치 보기">📂 <span class="explorer">Finder</span>에서 보기</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="round r-trash" id="trash-btn" title="버리기 (←)">🗑️</button>
+        <button class="round small" id="undo-btn" title="되돌리기 (Z)" disabled>↩</button>
+        <button class="round r-keep" id="keep-btn" title="남기기 (→)">📌</button>
+      </div>
+      <div class="keys">← 버리기 · 스페이스 열어보기 · Z 되돌리기 · 남기기 →</div>
+    </div>
+
+    <!-- 다 봤어요 -->
+    <div class="view center" id="v-done">
+      <div class="folder" style="--f:#ffc2d1">
+        <div class="tab"></div>
+        <div class="papers"><span>🗑</span><span>✨</span><span>📦</span></div>
+        <div class="front" id="done-folder">휴지통</div>
+      </div>
+      <div class="hero display">다 만나봤어요!</div>
+      <p>휴지통을 비우면<br />용량이 진짜로 줄어요.</p>
+      <button class="pill" id="again-btn">다른 폴더 고르기</button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+const TOKEN = document.querySelector('meta[name="tidy-token"]').content;
+const IS_WIN = document.querySelector('meta[name="platform"]').content === "windows";
+const EXPLORER = IS_WIN ? "탐색기" : "Finder";
+document.querySelectorAll(".explorer").forEach((el) => (el.textContent = EXPLORER));
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let rootId = null;     // downloads / desktop / documents
+let rootName = "";
+let queue = [];        // 아직 안 본 파일들
+let total = 0;         // 이번에 볼 카드 수
+let current = null;
+let history = [];      // 되돌리기용 [{item, action}]
+let sent = 0;          // 이번에 휴지통으로 보낸 용량
+let pipWin = null;
+let busy = false;
+
+// ---------- 서버와 이야기하기 ----------
+async function api(url, body) {
+  let res;
+  try {
+    res = await fetch(url, {
+      method: body ? "POST" : "GET",
+      headers: { "x-tidy-token": TOKEN, "content-type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error("파일팅이 꺼져 있어요. 다시 켜고(/fileting:open 또는 npx fileting) 새로고침해주세요.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 403 && data.error === "forbidden") throw new Error("파일팅이 다시 켜졌어요. 크롬 탭을 새로고침해주세요 🔄");
+  if (!res.ok) throw new Error(data.error || "알 수 없는 오류예요");
+  return data;
+}
+
+// ---------- 보조 ----------
+function fmtSize(b) {
+  if (b < 1024) return b + " B";
+  const u = ["KB", "MB", "GB", "TB"];
+  let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < u.length - 1);
+  return (b >= 100 ? b.toFixed(0) : b.toFixed(1)) + " " + u[i];
+}
+function fmtAge(ms) {
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days < 1) return "오늘";
+  if (days < 30) return days + "일 전";
+  if (days < 365) return Math.floor(days / 30) + "개월 전";
+  return Math.floor(days / 365) + "년 전";
+}
+function show(view) {
+  document.querySelectorAll("#app .view").forEach((v) => v.classList.toggle("on", v.id === view));
+}
+let toastTimer;
+function toast(t) {
+  $("toast").textContent = t;
+  $("toast").classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("on"), 2200);
+}
+function keptKey(item) { return "kept:" + rootId + "/" + item.rel + ":" + item.size; }
+function isKept(item) { try { return localStorage.getItem(keptKey(item)) === "1"; } catch { return false; } }
+function setKept(item, on) {
+  try { on ? localStorage.setItem(keptKey(item), "1") : localStorage.removeItem(keptKey(item)); } catch {}
+}
+function updateSent() {
+  $("bin-chip").textContent = "🗑 " + fmtSize(sent);
+  $("bin-chip").classList.toggle("full", sent > 0);
+  $("xp-right").textContent = sent ? `휴지통으로 ${fmtSize(sent)}` : "";
+  $("done-folder").textContent = sent ? `휴지통 ${fmtSize(sent)}` : "휴지통";
+}
+
+// ---------- 파일 설명 (규칙 기반) ----------
+const TONE = {
+  install: "#ffc9a8", image: "#ffc2d1", video: "#d9c2f0", doc: "#b9d8c2",
+  archive: "#b8ddf2", sheet: "#cfe6a8", design: "#ffe08a", etc: "#e9e3d3",
+};
+const RULES = [
+  { test: (n) => /\.(crdownload|download|part)$/i.test(n), icon: "⏳", tone: "etc", tag: "덜 받은 파일", verdict: "trash",
+    text: "다운로드하다 멈춘 파일이에요. 열 수 없는 반쪽짜리라 지워도 돼요." },
+  // 설치 파일은 컴퓨터 종류에 따라 설명이 반대가 돼요
+  IS_WIN
+    ? { test: (n) => /\.(dmg|pkg)$/i.test(n), icon: "🍎", tone: "install", tag: "맥용", verdict: "trash",
+        text: "맥용 설치 파일이에요. 윈도우에서는 실행할 수 없어요." }
+    : { test: (n) => /\.(dmg|pkg)$/i.test(n), icon: "📦", tone: "install", tag: "설치 파일", verdict: "trash",
+        text: "맥 앱 설치 파일이에요. 이미 설치했다면 더는 필요 없어요." },
+  IS_WIN
+    ? { test: (n) => /\.(exe|msi)$/i.test(n), icon: "📦", tone: "install", tag: "설치 파일", verdict: "check",
+        text: "프로그램 설치 파일이에요. 이미 설치했다면 필요 없지만, 설치 없이 바로 쓰는 프로그램일 수도 있어요." }
+    : { test: (n) => /\.(exe|msi)$/i.test(n), icon: "🪟", tone: "install", tag: "윈도우용", verdict: "trash",
+        text: "윈도우용 설치 파일이에요. 맥에서는 실행할 수 없어요." },
+  { test: (n) => /\.(lnk|url)$/i.test(n), icon: "🔗", tone: "etc", tag: "바로가기", verdict: "check",
+    text: "바로가기예요. 지워도 원래 프로그램이나 파일은 그대로 있어요." },
+  { test: (n) => /\.(iso|img)$/i.test(n), icon: "💿", tone: "install", tag: "디스크 이미지", verdict: "check",
+    text: "운영체제나 프로그램 설치용 디스크 이미지예요. 보통 아주 커요." },
+  { test: (n) => /\.apk$/i.test(n), icon: "🤖", tone: "install", tag: "안드로이드 앱", verdict: "trash",
+    text: "안드로이드 앱 설치 파일이에요. 맥에서는 쓸 일이 거의 없어요." },
+  { test: (n) => /^(스크린샷|Screenshot|Screen Shot)/i.test(n), icon: "📸", tone: "image", tag: "스크린샷", verdict: "check",
+    text: "잠깐 보여주려고 찍은 거라면 지워도 되고, 기록용이라면 남겨두세요." },
+  { test: (n) => /^(화면 기록|Screen Recording)/i.test(n), icon: "🎥", tone: "video", tag: "화면 녹화", verdict: "check",
+    text: "화면 녹화 영상이라 용량이 커요. 이미 공유했다면 지워도 될 수 있어요." },
+  { test: (n) => /\.(zip|rar|7z|tar|gz|tgz)$/i.test(n), icon: "🗜️", tone: "archive", tag: "압축 파일", verdict: "check",
+    text: "이미 풀었다면 같은 내용의 폴더가 옆에 있을 수 있어요." },
+  { test: (n) => /\.(mp4|mov|mkv|avi|webm)$/i.test(n), icon: "🎬", tone: "video", tag: "영상", verdict: "check",
+    text: "용량을 많이 차지해요. 클라우드나 휴대폰에도 있다면 지워도 돼요." },
+  { test: (n) => /\.(mp3|wav|m4a|aac|flac)$/i.test(n), icon: "🎵", tone: "video", tag: "소리", verdict: "check",
+    text: "음악이나 녹음 파일이에요." },
+  { test: (n) => /\.(jpe?g|png|heic|gif|webp)$/i.test(n), icon: "🖼️", tone: "image", tag: "이미지", verdict: "check",
+    text: "이미지 파일이에요." },
+  { test: (n) => /\.(psd|ai|fig|sketch)$/i.test(n), icon: "🎨", tone: "design", tag: "디자인 원본", verdict: "keep",
+    text: "나중에 다시 고칠 수 있는 원본이라 남겨두는 게 좋아요." },
+  { test: (n) => /\.pdf$/i.test(n), icon: "📄", tone: "doc", tag: "PDF", verdict: "check",
+    text: "공고문, 영수증, 강의자료처럼 한 번 보고 끝나는 경우가 많아요." },
+  { test: (n) => /\.(hwp|hwpx|docx?|pages)$/i.test(n), icon: "📝", tone: "doc", tag: "문서", verdict: "keep",
+    text: "직접 쓴 글일 수 있으니 열어보고 정하세요." },
+  { test: (n) => /\.(pptx?|key)$/i.test(n), icon: "📊", tone: "design", tag: "발표 자료", verdict: "keep",
+    text: "직접 만든 거라면 포트폴리오로 쓸 수 있어요." },
+  { test: (n) => /\.(xlsx?|csv|numbers)$/i.test(n), icon: "📈", tone: "sheet", tag: "표", verdict: "check",
+    text: "표 데이터예요." },
+  { test: (n) => /\.torrent$/i.test(n), icon: "🧲", tone: "etc", tag: "토렌트", verdict: "trash",
+    text: "다운로드를 시작할 때만 쓰이는 연결 파일이에요." },
+  { test: (n) => /\.ics$/i.test(n), icon: "📅", tone: "etc", tag: "캘린더 초대", verdict: "trash",
+    text: "캘린더에 이미 추가했다면 필요 없어요." },
+];
+const dupKey = (name, size) => name.replace(/ \(\d+\)(?=\.[^.]+$)/, "") + ":" + size;
+
+const UNKNOWN = { icon: "❓", tone: "etc", tag: "모르는 파일", verdict: "check", text: "이름만으로는 알기 어려워요. 열어보고 정하세요." };
+const hasRule = (item) => RULES.some((r) => r.test(item.name));
+
+function describe(item, dupes) {
+  let rule = RULES.find((r) => r.test(item.name));
+  const chips = [];
+  if (!rule) {
+    const ai = aiCached(item);
+    if (ai) {
+      rule = { ...ai, tone: "etc" };
+      chips.push({ label: "🤖 AI 추측" });
+    } else {
+      rule = { ...UNKNOWN };
+      if (aiPending.has(aiKey(item))) rule.text = "🤖 AI가 어떤 파일인지 알아보는 중이에요…";
+      else if (ai === undefined && aiHint) rule.text += " (" + aiHint + ")";
+    }
+  }
+  let verdict = rule.verdict;
+  let text = rule.text;
+  chips.unshift({ label: rule.tag });
+
+  const others = (dupes.get(dupKey(item.name, item.size)) || []).filter((t) => t !== item && !t.trashed);
+  if (others.length) {
+    chips.push({ label: "👯 쌍둥이 있음", kind: "trash" });
+    text += ` 크기까지 똑같은 "${others[0].name}"이 또 있어요.`;
+    if (verdict === "check") verdict = "trash";
+  } else if (/ \(\d+\)\.[^.]+$/.test(item.name)) {
+    chips.push({ label: "(1) 붙은 이름", kind: "check" });
+    text += " 이름 끝의 (1)은 같은 파일을 또 받았다는 표시인 경우가 많아요.";
+  }
+  const months = (Date.now() - item.mtime) / (30 * 86400000);
+  if (months >= 6) chips.push({ label: `💤 ${Math.floor(months)}개월 방치`, kind: "check" });
+
+  const badge = { trash: "👋", check: "🤔", keep: "💚" }[verdict];
+  const verdictLabel = { trash: "버려도 될 것 같아요", check: "열어보고 정해요", keep: "남기는 게 좋아요" }[verdict];
+  chips.unshift({ label: verdictLabel, kind: verdict });
+  return { icon: rule.icon, tone: TONE[rule.tone], verdict, badge, text, chips };
+}
+
+// ---------- AI 설명 (모르는 파일만, 미리 묶어서) ----------
+// 사용자의 Claude 구독으로 돌아가니까 아껴 써요: 규칙으로 모르는 파일만, 15개씩 묶어서, 한 번 물은 건 기억해둬요
+let aiReady = false;
+let aiHint = "";
+const aiPending = new Set();
+const aiKey = (item) => "ai:" + item.name + ":" + item.size;
+function aiCached(item) {
+  try {
+    const v = localStorage.getItem(aiKey(item));
+    return v ? JSON.parse(v) : undefined;
+  } catch { return undefined; }
+}
+async function checkAI() {
+  try {
+    const s = await api("/api/ai");
+    aiReady = s.ready;
+    aiHint = s.ready ? "" : s.hint || "";
+  } catch { aiReady = false; }
+}
+async function prefetchAI() {
+  if (!aiReady) return;
+  const upcoming = [current, ...queue].filter(Boolean).slice(0, 30);
+  const batch = upcoming
+    .filter((f) => !hasRule(f) && aiCached(f) === undefined && !aiPending.has(aiKey(f)))
+    .slice(0, 15);
+  if (!batch.length) return;
+  batch.forEach((f) => aiPending.add(aiKey(f)));
+  if (current && batch.includes(current)) render(current);
+  try {
+    const { results } = await api("/api/explain", {
+      files: batch.map((f, i) => ({ id: String(i), name: f.name, size: fmtSize(f.size), age: fmtAge(f.mtime) })),
+    });
+    for (const r of results) {
+      const f = batch[Number(r.id)];
+      if (!f) continue;
+      try { localStorage.setItem(aiKey(f), JSON.stringify({ icon: r.icon, tag: r.tag, verdict: r.verdict, text: r.text })); } catch {}
+    }
+  } catch (err) {
+    aiReady = false;
+    aiHint = err.message;
+  }
+  batch.forEach((f) => aiPending.delete(aiKey(f)));
+  if (current && batch.includes(current)) render(current);
+  prefetchAI();
+}
+
+// ---------- 폴더 고르기 ----------
+let dupes = new Map();
+async function pickRoot(id, name) {
+  $("pick-msg").textContent = "";
+  show("v-scan");
+  $("scan-msg").textContent = `${name} 파일들 프로필 보는 중…`;
+  let files;
+  try {
+    ({ files } = await api("/api/scan?root=" + id));
+  } catch (err) {
+    show("v-start");
+    $("pick-msg").textContent = err.message;
+    return;
+  }
+  rootId = id;
+  rootName = name;
+  dupes = new Map();
+  for (const f of files) {
+    const key = dupKey(f.name, f.size);
+    if (!dupes.has(key)) dupes.set(key, []);
+    dupes.get(key).push(f);
+  }
+  queue = files.filter((f) => !isKept(f)).sort((a, b) => b.size - a.size);
+  total = queue.length;
+  history = [];
+  $("undo-btn").disabled = true;
+  updateSent();
+  await checkAI();
+  next();
+}
+
+// ---------- 카드 그리기 ----------
+const card = $("card");
+function render(item) {
+  const d = describe(item, dupes);
+  const dot = item.name.lastIndexOf(".");
+  $("c-photo").style.setProperty("--tone", d.tone);
+  $("c-ext").textContent = dot > 0 ? item.name.slice(dot + 1).toUpperCase().slice(0, 6) : "파일";
+  $("c-icon").textContent = d.icon;
+  $("c-badge").textContent = d.badge;
+  $("c-name").textContent = item.name;
+  $("c-name").title = item.name;
+  $("c-size").textContent = `${fmtSize(item.size)} · ${fmtAge(item.mtime)}`;
+  const folder = item.rel.includes("/") ? item.rel.slice(0, item.rel.lastIndexOf("/")) : "";
+  $("c-where").textContent = "📂 " + rootName + (folder ? "/" + folder : "");
+  $("c-explain").textContent = d.text;
+  $("c-chips").innerHTML = "";
+  for (const c of d.chips) {
+    const s = document.createElement("span");
+    s.className = "chip" + (c.kind ? " " + c.kind : "");
+    s.textContent = c.label;
+    $("c-chips").append(s);
+  }
+  const seen = total - queue.length - 1;
+  $("xp-fill").style.width = (total ? (seen / total) * 100 : 0) + "%";
+  $("xp-left").textContent = `${seen + 1} / ${total}장째`;
+  $("card-back").style.visibility = queue.length ? "visible" : "hidden";
+}
+
+function next() {
+  current = queue.shift() || null;
+  if (!current) {
+    $("xp-fill").style.width = "100%";
+    show("v-done");
+    return;
+  }
+  render(current);
+  resetCard(true);
+  show("v-card");
+  prefetchAI();
+}
+
+function setDrag(dx) {
+  card.style.transform = `translateX(${dx}px) rotate(${dx / 14}deg)`;
+  card.querySelector(".s-trash").style.opacity = Math.min(1, Math.max(0, -dx / 90));
+  card.querySelector(".s-keep").style.opacity = Math.min(1, Math.max(0, dx / 90));
+}
+function resetCard(pop) {
+  card.style.transition = "none";
+  setDrag(0);
+  card.style.transform = "";
+  card.classList.remove("enter");
+  if (pop) { void card.offsetWidth; card.classList.add("enter"); }
+}
+async function flyOut(dir) {
+  card.style.transition = "transform .25s ease-in";
+  setDrag(dir * 90);
+  void card.offsetWidth;
+  card.style.transform = `translateX(${dir * 420}px) rotate(${dir * 28}deg)`;
+  await wait(250);
+}
+async function flyIn(dir) {
+  card.style.transition = "none";
+  card.style.transform = `translateX(${dir * 420}px) rotate(${dir * 28}deg)`;
+  void card.offsetWidth;
+  card.style.transition = "transform .28s ease-out";
+  card.style.transform = "";
+  await wait(280);
+}
+
+// 손으로 끌어서 넘기기
+let drag = null;
+card.addEventListener("pointerdown", (e) => {
+  if (!current || busy || e.target.closest("button")) return;
+  drag = { x: e.clientX, dx: 0 };
+  card.setPointerCapture(e.pointerId);
+  card.style.transition = "none";
+  card.classList.remove("enter");
+});
+card.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  drag.dx = e.clientX - drag.x;
+  setDrag(drag.dx);
+});
+card.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const dx = drag.dx;
+  drag = null;
+  if (dx < -90) decide("trash");
+  else if (dx > 90) decide("keep");
+  else { card.style.transition = "transform .2s"; setDrag(0); }
+});
+card.addEventListener("pointercancel", () => { drag = null; setDrag(0); });
+
+// ---------- 버리기 · 남기기 · 되돌리기 ----------
+async function decide(action) {
+  if (!current || busy) return;
+  busy = true;
+  const item = current;
+  const anim = flyOut(action === "trash" ? -1 : 1);
+  try {
+    if (action === "trash") {
+      const { trashed } = await api("/api/trash", { root: rootId, rel: item.rel });
+      item.trashed = trashed;
+      sent += item.size;
+      updateSent();
+      toast(trashed ? "👋 휴지통으로 보냈어요" : "👋 휴지통으로 보냈어요 (되돌리기는 휴지통에서 직접 해주세요)");
+    } else {
+      setKept(item, true);
+      toast("💚 남겨뒀어요. 다음에도 안 물어볼게요");
+    }
+    history.push({ item, action });
+    await anim;
+    next();
+  } catch (err) {
+    await anim;
+    await flyIn(-1);
+    toast("보내지 못했어요: " + err.message);
+  }
+  $("undo-btn").disabled = !history.length;
+  busy = false;
+}
+
+async function undo() {
+  const last = history.pop();
+  if (!last || busy) return;
+  busy = true;
+  const { item, action } = last;
+  try {
+    if (action === "trash") {
+      const r = await api("/api/restore", { root: rootId, rel: item.rel, trashed: item.trashed });
+      item.rel = r.rel;
+      item.name = r.name;
+      item.trashed = null;
+      sent -= item.size;
+      updateSent();
+      toast("↩ 휴지통에서 꺼내왔어요");
+    } else {
+      setKept(item, false);
+      toast("↩ 남기기를 취소했어요");
+    }
+    if (current) queue.unshift(current);
+    current = item;
+    render(item);
+    show("v-card");
+    await flyIn(action === "trash" ? -1 : 1);
+  } catch (err) {
+    history.push(last);
+    toast("되돌리지 못했어요: " + err.message);
+  }
+  $("undo-btn").disabled = !history.length;
+  busy = false;
+}
+
+// ---------- 열어보기 ----------
+async function peek(reveal) {
+  if (!current) return;
+  try {
+    await api("/api/open", { root: rootId, rel: current.rel, reveal });
+    toast(reveal ? `📂 ${EXPLORER}에서 보여줬어요` : "👀 열었어요. 보고 와서 정해주세요");
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+// ---------- 연결 ----------
+$("open-btn").addEventListener("click", () => peek(false));
+$("reveal-btn").addEventListener("click", () => peek(true));
+document.querySelectorAll("#folders .folder").forEach((btn) =>
+  btn.addEventListener("click", () => pickRoot(btn.dataset.root, btn.querySelector(".front").textContent))
+);
+$("again-btn").addEventListener("click", () => show("v-start"));
+$("trash-btn").addEventListener("click", () => decide("trash"));
+$("keep-btn").addEventListener("click", () => decide("keep"));
+$("undo-btn").addEventListener("click", undo);
+
+function onKey(e) {
+  if (e.key === "z" || e.key === "Z") return undo();
+  if (!$("v-card").classList.contains("on")) return;
+  if (e.key === "ArrowLeft") decide("trash");
+  if (e.key === "ArrowRight") decide("keep");
+  if (e.key === " ") { e.preventDefault(); peek(false); }
+}
+document.addEventListener("keydown", onKey);
+
+// ---------- 작은 창(PiP)으로 띄우기 — 체크아웃과 같은 방식 ----------
+const app = $("app");
+$("pip-btn").addEventListener("click", async () => {
+  if (!("documentPictureInPicture" in window)) {
+    $("pip-msg").textContent = "이 브라우저는 작은 창을 지원하지 않아요. 최신 크롬에서 열어주세요.";
+    return;
+  }
+  if (pipWin) return;
+  try {
+    pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 540 });
+  } catch {
+    $("pip-msg").textContent = "작은 창을 열지 못했어요.";
+    return;
+  }
+  document.querySelectorAll('link[rel="stylesheet"], style').forEach((el) => pipWin.document.head.appendChild(el.cloneNode(true)));
+  pipWin.document.title = "파일팅";
+  pipWin.document.body.className = "pip-body";
+  pipWin.document.body.appendChild(app);
+  pipWin.document.addEventListener("keydown", onKey);
+  $("pip-msg").textContent = "작은 창에서 정리하는 중이에요.";
+  pipWin.addEventListener("pagehide", () => {
+    document.querySelector(".page").appendChild(app);
+    $("pip-msg").textContent = "";
+    pipWin = null;
+  });
+});
+</script>
+</body>
+</html>

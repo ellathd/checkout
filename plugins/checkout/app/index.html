@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkout</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;700;900&family=UnifrakturMaguntia&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;700;800&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,700;1,6..96,400;1,6..96,700&display=swap" rel="stylesheet" />
+  <link href="styles.css" rel="stylesheet" />
+</head>
+<body>
+  <main class="launcher">
+    <header>
+      <p class="launcher-cmd">// for developers, while AI is loading</p>
+      <h1><span class="prompt">$</span> checkout<span class="cursor"></span></h1>
+      <p class="launcher-kicker">AI 기다리는 동안 읽는 개발자 신문 · v1.1</p>
+      <div class="plaid-band" style="background-color:#1b1b1a;background-image:repeating-linear-gradient(90deg,#6e1f2eaa 0 12px,transparent 12px 22px,#d46a7acc 22px 25px,transparent 25px 34px),repeating-linear-gradient(0deg,#6e1f2eaa 0 12px,transparent 12px 22px,#d46a7acc 22px 25px,transparent 25px 34px)"></div>
+      <p class="launcher-desc">버튼을 누르면 작은 창이 다른 앱 위에 떠요. 터미널 옆에 두고 AI가 일하는 동안 읽어요.</p>
+      <button id="pip-btn" class="xp-button pip-btn">작은 창으로 띄우기</button>
+      <p id="pip-msg" class="launcher-msg"></p>
+    </header>
+
+    <!-- 매거진 화면. PiP를 띄우면 이 상자가 작은 창으로 옮겨가요 -->
+    <div id="stage" class="stage">
+      <div id="mag" class="mag">
+        <div id="status" class="status"></div>
+        <div id="view" class="view"></div>
+        <div id="mini" class="mini-view"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // 주소 뒤에 ?issue=sample-fashion 을 붙이면 다른 호를 볼 수 있어요
+    const which = new URLSearchParams(location.search).get("issue") || "issue";
+    const file = /^[a-z0-9-]+$/.test(which) ? which : "issue";
+    document.write(`<script src="data/${file}.js"><\/script>`);
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
