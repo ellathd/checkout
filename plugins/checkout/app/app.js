@@ -50,6 +50,26 @@ const CAT_PIXELS = [
 ];
 const CAT_COLORS = { k: "#1d1d1f", w: "#f6f6f2", y: "#c8d860", p: "#e89aa8" };          // 턱시도
 const GINGER_COLORS = { k: "#f0a35e", w: "#fff1df", y: "#7fc96b", p: "#f29aa6" };      // 치즈 고양이
+// 회색 고등어 고양이 (멍한 표정, 작업 중이면 이마에 로딩 표시)
+// g 회색, d 줄무늬, l 밝은 주둥이, e 귀 안쪽, y 눈, k 눈동자, w 반짝임, p 코, m 입
+const TABBY_PIXELS = [
+  ".g............g.",
+  ".gg..........gg.",
+  ".gegg......ggeg.",
+  ".geggggggggggeg.",
+  "gggdgdgddgdgdggg",
+  "ggggdggddggdgggg",
+  "ggyyyyggggyyyygg",
+  "gyykkwyggykkwyyg",
+  "gyykkkyggykkkyyg",
+  "ggyyyyggggyyyygg",
+  "gggggllppllggggg",
+  "ggggllllllllgggg",
+  "gggglllmmlllgggg",
+  ".gggllllllllggg.",
+];
+const TABBY_COLORS = { g: "#9b968d", d: "#5d5952", l: "#ddd8ce", e: "#e3b3ab", y: "#c3c06a", k: "#141414", w: "#ffffff", p: "#d4918a", m: "#7a3d3d" };
+
 function pixelCat(size = 28, colors = CAT_COLORS, pixels = CAT_PIXELS) {
   const w = pixels[0].length, h = pixels.length;
   let rects = "";
@@ -132,7 +152,7 @@ function coverHTML() {
           <span class="ln">2</span><span class="code">${codeLine(lead.title)}</span>
           <span class="ln">3</span><span class="code"><span class="fn">open</span>(<span class="var">오늘</span>); <span class="cmt">// 읽기 →</span></span>
           ${emptyLines(4, 16)}
-          <span class="editor-cat" aria-hidden="true"><img src="images/cat-loading.jpg" alt="" /><span class="cat-spin">${spinnerSVG()}</span></span>
+          <span class="editor-cat" aria-hidden="true">${pixelCat(84, TABBY_COLORS, TABBY_PIXELS)}<span class="cat-spin">${spinnerSVG()}</span></span>
           ${stamp(lead)}
         </button>
 
