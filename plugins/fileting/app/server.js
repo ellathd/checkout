@@ -7,7 +7,7 @@ const fsp = fs.promises;
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
-const { platform, exists, runClaude } = require("./platform");
+const { platform, exists, runCli, findCommand } = require("./platform");
 
 const PORT = 5190;
 const APP = "fileting";
@@ -162,35 +162,92 @@ const AI_PROMPT = `너는 컴퓨터의 다운로드·데스크탑 폴더 정리�
 파일 목록:
 `;
 
-async function findClaude() {
-  for (const p of platform.claudePaths()) if (await exists(p)) return p;
-  return null;
-}
+// 사용자 컴퓨터에 있는 AI 명령을 써요: Claude Code(claude) 또는 Codex(codex)
+// 둘 다 있으면 Claude 먼저. 바꾸려면: npx fileting --ai codex  (또는 환경변수 FILETING_AI=codex)
+const aiFlag = process.argv.indexOf("--ai");
+const AI_PREFER = (aiFlag > -1 ? process.argv[aiFlag + 1] : process.env.FILETING_AI) === "codex" ? "codex" : "claude";
 
 const SETTINGS_FILE = path.join(os.tmpdir(), "fileting-claude-settings.json");
 fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ disableAllHooks: true }));
 
-let aiStatus = null; // { engine, ready, hint }
+const ENGINES = {
+  claude: {
+    label: "Claude",
+    find: () => findCommand("claude", platform.claudePaths()),
+    async loggedIn(cmd) {
+      try { return !!JSON.parse(await runCli(cmd, ["auth", "status"], "", 10000)).loggedIn; } catch { return false; }
+    },
+    loginHint: "터미널에서 claude 를 실행해 로그인하면 AI 설명이 켜져요.",
+    async ask(cmd, input) {
+      const out = await runCli(cmd, [
+        "-p",
+        "--model", "haiku",
+        "--system-prompt", "Follow the user instructions exactly.",
+        "--output-format", "json",
+        "--tools", "",
+        "--no-session-persistence",
+        "--disable-slash-commands",
+        "--strict-mcp-config",
+        // 사용자 훅(작업 끝 알림 등)이 이 질문 때문에 울리지 않게 꺼요
+        "--settings", SETTINGS_FILE,
+      ], input, 120000);
+      const result = JSON.parse(out);
+      if (result.is_error) throw Object.assign(new Error(result.result || "AI가 답하지 못했어요"), { relogin: true });
+      return String(result.result || "");
+    },
+  },
+  codex: {
+    label: "Codex",
+    find: () => findCommand("codex", platform.codexPaths()),
+    async loggedIn(cmd) {
+      // codex login status 는 로그인돼 있으면 0으로 끝나요
+      try { await runCli(cmd, ["login", "status"], "", 10000); return true; } catch { return false; }
+    },
+    loginHint: "터미널에서 codex login 을 하면 AI 설명이 켜져요.",
+    async ask(cmd, input) {
+      const outFile = path.join(os.tmpdir(), `fileting-codex-${process.pid}-${Date.now()}.txt`);
+      try {
+        await runCli(cmd, [
+          "exec",
+          "--skip-git-repo-check",
+          "--sandbox", "read-only", // 파일을 읽거나 고치지 못하게 해요
+          "--ephemeral",            // 대화 기록을 남기지 않아요
+          "-c", "model_reasoning_effort=low", // 짧은 설명이라 가볍게 (사용량 절약)
+          "-o", outFile,            // 마지막 답만 파일로 받아요
+          "-",                      // 질문은 표준입력으로
+        ], input, 180000);
+        return await fsp.readFile(outFile, "utf8");
+      } finally {
+        fsp.unlink(outFile).catch(() => {});
+      }
+    },
+  },
+};
+
+let aiStatus = null; // { engine, ready, hint, cmd }
 async function checkAI() {
   if (FAKE_AI) return (aiStatus = { engine: "claude", ready: true });
   if (aiStatus?.ready) return aiStatus;
-  const claude = await findClaude();
-  if (!claude) return (aiStatus = { engine: null, ready: false, hint: "AI 설명을 쓰려면 Claude Code가 필요해요." });
-  try {
-    const out = JSON.parse(await runClaude(claude, ["auth", "status"], "", 10000));
-    if (out.loggedIn) return (aiStatus = { engine: "claude", ready: true, cmd: claude });
-  } catch {}
-  return (aiStatus = { engine: "claude", ready: false, hint: "터미널에서 claude 를 실행해 로그인하면 AI 설명이 켜져요." });
+  const order = AI_PREFER === "codex" ? ["codex", "claude"] : ["claude", "codex"];
+  let firstFound = null;
+  for (const name of order) {
+    const cmd = await ENGINES[name].find();
+    if (!cmd) continue;
+    if (await ENGINES[name].loggedIn(cmd)) return (aiStatus = { engine: name, ready: true, cmd });
+    firstFound = firstFound || name;
+  }
+  if (firstFound) return (aiStatus = { engine: firstFound, ready: false, hint: ENGINES[firstFound].loginHint });
+  return (aiStatus = { engine: null, ready: false, hint: "AI 설명을 쓰려면 Claude Code나 Codex가 필요해요." });
 }
 
 // 한 번에 하나씩만 물어봐요 (사용자 사용량을 아끼려고)
 let aiQueue = Promise.resolve();
 function explain(files) {
-  const job = aiQueue.then(() => askClaude(files));
+  const job = aiQueue.then(() => askAI(files));
   aiQueue = job.catch(() => {});
   return job;
 }
-async function askClaude(files) {
+async function askAI(files) {
   if (FAKE_AI) {
     await new Promise((r) => setTimeout(r, 1500));
     return files.map((f) => ({ id: f.id, icon: "🧪", tag: "가짜 AI", verdict: "check", text: `${f.name}은(는) 테스트용 가짜 설명이에요.` }));
@@ -198,25 +255,14 @@ async function askClaude(files) {
   const status = await checkAI();
   if (!status.ready) throw new Error(status.hint);
   const list = files.map((f) => ({ id: f.id, name: f.name, size: f.size, age: f.age }));
-  // 지시문과 파일 목록은 표준입력으로 넘기고, 명령줄에는 단순한 값만 둬요 (윈도우 따옴표 문제 방지)
-  const out = await runClaude(status.cmd, [
-    "-p",
-    "--model", "haiku",
-    "--system-prompt", "Follow the user instructions exactly.",
-    "--output-format", "json",
-    "--tools", "",
-    "--no-session-persistence",
-    "--disable-slash-commands",
-    "--strict-mcp-config",
-    // 사용자 훅(작업 끝 알림 등)이 이 질문 때문에 울리지 않게 꺼요
-    "--settings", SETTINGS_FILE,
-  ], AI_PROMPT + JSON.stringify(list), 120000);
-  const result = JSON.parse(out);
-  if (result.is_error) {
+  let text;
+  try {
+    // 지시문과 파일 목록은 표준입력으로 넘기고, 명령줄에는 단순한 값만 둬요 (윈도우 따옴표 문제 방지)
+    text = await ENGINES[status.engine].ask(status.cmd, AI_PROMPT + JSON.stringify(list));
+  } catch (e) {
     aiStatus = null; // 로그인이 풀렸을 수 있으니 다음에 다시 확인해요
-    throw new Error(result.result || "AI가 답하지 못했어요");
+    throw new Error(e.relogin ? e.message : `${ENGINES[status.engine].label}가 답하지 못했어요`);
   }
-  const text = String(result.result || "");
   const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
   const ids = new Set(files.map((f) => f.id));
   return arr
@@ -227,6 +273,7 @@ async function askClaude(files) {
       tag: String(a.tag || "AI 추측").slice(0, 12),
       verdict: ["trash", "check", "keep"].includes(a.verdict) ? a.verdict : "check",
       text: String(a.text || "").slice(0, 160),
+      engine: ENGINES[status.engine].label,
     }));
 }
 

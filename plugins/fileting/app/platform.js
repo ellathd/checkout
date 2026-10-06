@@ -128,6 +128,15 @@ const mac = {
       path.join(HOME, ".claude/local/claude"),
     ];
   },
+
+  codexPaths() {
+    return [
+      "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
+      path.join(HOME, ".local/bin/codex"),
+      path.join(HOME, ".npm-global/bin/codex"),
+    ];
+  },
 };
 
 // ============================== 윈도우 ==============================
@@ -267,12 +276,32 @@ const win = {
       process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs/claude/claude.exe"),
     ].filter(Boolean);
   },
+
+  codexPaths() {
+    return [
+      process.env.APPDATA && path.join(process.env.APPDATA, "npm/codex.cmd"),
+      path.join(HOME, ".local/bin/codex.exe"),
+    ].filter(Boolean);
+  },
 };
 
 const platform = IS_WIN ? win : IS_MAC ? mac : null;
 
-// claude 명령 실행: 질문은 표준입력으로 넘겨요 (윈도우 .cmd 파일도 따옴표 문제 없이 돌아가게)
-function runClaude(cmd, args, input, timeout) {
+// 정해진 위치에 없으면 PATH(터미널이 명령을 찾는 폴더 목록)에서도 찾아봐요
+async function findCommand(name, candidates) {
+  for (const c of candidates) if (await exists(c)) return c;
+  const exts = IS_WIN ? [".cmd", ".exe", ""] : [""];
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    for (const ext of exts) {
+      const full = path.join(dir, name + ext);
+      if (dir && (await exists(full))) return full;
+    }
+  }
+  return null;
+}
+
+// claude·codex 명령 실행: 질문은 표준입력으로 넘겨요 (윈도우 .cmd 파일도 따옴표 문제 없이 돌아가게)
+function runCli(cmd, args, input, timeout) {
   const useShell = IS_WIN && /\.cmd$/i.test(cmd);
   const quote = (a) => (useShell && /[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
   return new Promise((resolve, reject) => {
@@ -286,4 +315,4 @@ function runClaude(cmd, args, input, timeout) {
   });
 }
 
-module.exports = { platform, IS_WIN, IS_MAC, exists, runClaude };
+module.exports = { platform, IS_WIN, IS_MAC, exists, runCli, findCommand };

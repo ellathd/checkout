@@ -493,7 +493,7 @@ function describe(item, dupes) {
     const ai = aiCached(item);
     if (ai) {
       rule = { ...ai, tone: "etc" };
-      chips.push({ label: "🤖 AI 추측" });
+      chips.push({ label: `🤖 ${ai.engine || "AI"} 추측` });
     } else {
       rule = { ...UNKNOWN };
       if (aiPending.has(aiKey(item))) rule.text = "🤖 AI가 어떤 파일인지 알아보는 중이에요…";
@@ -562,7 +562,7 @@ async function prefetchAI() {
     for (const r of results) {
       const f = batch[Number(r.id)];
       if (!f) continue;
-      try { localStorage.setItem(aiKey(f), JSON.stringify({ icon: r.icon, tag: r.tag, verdict: r.verdict, text: r.text })); } catch {}
+      try { localStorage.setItem(aiKey(f), JSON.stringify({ icon: r.icon, tag: r.tag, verdict: r.verdict, text: r.text, engine: r.engine })); } catch {}
     }
   } catch (err) {
     aiReady = false;

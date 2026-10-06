@@ -3,6 +3,7 @@
 // 서버를 켜고 크롬에서 열어줘요. 이미 켜져 있으면 크롬만 열어요.
 //   --no-open   크롬은 열지 않고 서버만 켜요
 //   --detach    서버를 뒤에서 켜두고 바로 끝나요 (플러그인이 켤 때). 기록은 ~/.fileting/server.log
+//   --ai codex  Claude Code와 Codex가 둘 다 있을 때 Codex로 설명받기 (기본은 Claude)
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -69,7 +70,7 @@ async function detach() {
   fs.mkdirSync(dir, { recursive: true });
   const logFile = path.join(dir, "server.log");
   const log = fs.openSync(logFile, "a");
-  spawn(process.execPath, [__filename, "--no-open"], {
+  spawn(process.execPath, [__filename, ...process.argv.slice(2).filter((a) => a !== "--detach"), "--no-open"], {
     detached: true,
     stdio: ["ignore", log, log],
     windowsHide: true,
