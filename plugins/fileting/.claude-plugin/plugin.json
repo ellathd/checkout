@@ -1,6 +1,6 @@
 {
   "name": "fileting",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "AI가 일하는 동안 파일이랑 소개팅해요. 다운로드 폴더 파일을 작은 창에서 한 장씩 보고 버릴지 정해요.",
   "author": {
     "name": "Checkout"

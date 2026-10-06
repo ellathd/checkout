@@ -77,27 +77,75 @@ function resolveInRoot(rootId, rel) {
 }
 
 // ---------- 폴더 훑기 ----------
+// 글꼴 패키지(폰트 압축을 푼 폴더)는 글꼴이 수십 개라, 폴더 하나를 카드 한 장으로 묶어요
+const FONT_RE = /\.(ttf|otf|woff2?|ttc|eot)$/i;
+const BUNDLE_RE = /\.(zip|rar|7z|dmg|pkg|exe|msi)$/i;
+const isFontPack = (n) => n.fonts >= 5 && n.fonts / n.count >= 0.6 && !n.mixed;
+
 async function scan(rootDir) {
-  const out = [];
-  async function walk(dir, depth) {
+  let visited = 0;
+  // 1단계: 폴더마다 파일 수·글꼴 수·용량을 세어둬요
+  async function collect(dir, depth) {
+    const node = { dir, files: [], subs: [], count: 0, fonts: 0, size: 0, mtime: 0, mixed: false };
     let entries;
-    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return node; }
+    const dirNames = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
+    // 압축을 풀면 같은 이름의 폴더나 파일이 생겨요 (예: 글꼴.zip → 글꼴.ttf)
+    const otherNames = new Set(entries.filter((e) => !/\.(zip|rar|7z)$/i.test(e.name)).map((e) => e.name.replace(/\.[^.]+$/, "")));
+    let directOthers = 0;
     for (const e of entries) {
-      if (out.length >= MAX_FILES) return;
+      if (visited >= 20000) break;
       if (platform.skip(e.name)) continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
         if (SKIP_DIRS.has(e.name) || e.name.endsWith(".app") || depth >= MAX_DEPTH) continue;
-        await walk(full, depth + 1);
+        const sub = await collect(full, depth + 1);
+        node.subs.push(sub);
+        node.count += sub.count; node.fonts += sub.fonts; node.size += sub.size;
+        node.mtime = Math.max(node.mtime, sub.mtime);
       } else if (e.isFile()) {
+        visited++;
         try {
           const st = await fsp.stat(full);
-          out.push({ name: e.name, rel: path.relative(rootDir, full), size: st.size, mtime: st.mtimeMs });
+          const base = e.name.replace(/\.[^.]+$/, "");
+          node.files.push({
+            name: e.name, full, size: st.size, mtime: st.mtimeMs,
+            // 압축 파일 옆에 같은 이름의 폴더가 있으면 "이미 풀었다"는 뜻이에요
+            unzipped: /\.(zip|rar|7z)$/i.test(e.name) && (dirNames.has(base) || otherNames.has(base)) ? true : undefined,
+          });
+          node.count++; node.size += st.size; node.mtime = Math.max(node.mtime, st.mtimeMs);
+          if (FONT_RE.test(e.name)) node.fonts++;
+          else if (BUNDLE_RE.test(e.name)) node.mixed = true; // 압축·설치 파일이 섞인 "모음 폴더"는 묶지 않아요
+          else directOthers++;
         } catch {}
       }
     }
+    if (directOthers >= 3) node.mixed = true;
+    return node;
   }
-  await walk(rootDir, 0);
+  // 2단계: 카드 목록으로 펼쳐요. 글꼴 패키지는 폴더 한 장, 나머지는 파일 한 장씩
+  const out = [];
+  function flatten(node) {
+    for (const f of node.files) {
+      if (out.length >= MAX_FILES) return;
+      out.push({ name: f.name, rel: path.relative(rootDir, f.full), size: f.size, mtime: f.mtime, unzipped: f.unzipped });
+    }
+    for (const sub of node.subs) {
+      if (out.length >= MAX_FILES) return;
+      if (isFontPack(sub)) {
+        out.push({
+          name: path.basename(sub.dir), rel: path.relative(rootDir, sub.dir), size: sub.size, mtime: sub.mtime,
+          isDir: true, count: sub.count, fonts: sub.fonts,
+        });
+      } else {
+        flatten(sub);
+      }
+    }
+  }
+  flatten(await collect(rootDir, 0));
+  // 맥은 한글 파일 이름을 자모를 풀어서(ㅍ+ㅗ+ㅍ+ㅗ+ㄹ) 저장할 때가 있어요. 화면에선 똑같아 보여도
+  // "포폴" 같은 단어 비교가 안 맞아서, 보통 쓰는 형태(NFC)로 맞춰서 보내요. 맥 파일 시스템은 두 형태를 같은 파일로 봐요.
+  for (const f of out) { f.name = f.name.normalize("NFC"); f.rel = f.rel.normalize("NFC"); }
   return out;
 }
 
@@ -294,7 +342,7 @@ async function start() {
   });
 }
 
-module.exports = { start, PORT, APP, platform };
+module.exports = { start, PORT, APP, platform, scan };
 
 // node server.js 로 바로 실행할 때
 if (require.main === module) {

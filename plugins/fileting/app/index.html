@@ -127,6 +127,7 @@
     border-radius: 10px; font-size: 12px; line-height: 1.6; }
   .facts:empty { display: none; }
   .sorts { display: flex; gap: 6px; }
+  .sorts { flex-wrap: wrap; justify-content: center; }
   .sorts button { background: transparent; border: 2px solid var(--ink); border-radius: 999px; padding: 4px 10px;
     font-size: 12px; font-weight: 700; }
   .sorts button.on { background: var(--ink); color: var(--paper); }
@@ -248,6 +249,7 @@
         </button>
       </div>
       <div class="sorts" id="sorts">
+        <button data-sort="smart">✨ 추천순</button>
         <button data-sort="size">📏 큰 파일부터</button>
         <button data-sort="old">🕰️ 오래된 것부터</button>
       </div>
@@ -286,7 +288,8 @@
             <div class="chips" id="c-chips"></div>
             <div class="peek">
               <button id="open-btn" title="기본 앱으로 열기 (스페이스)">👀 열어보기</button>
-              <button id="reveal-btn" title="이 파일 위치 보기">📂 <span class="explorer">Finder</span>에서 보기</button>
+              <button id="reveal-btn" title="이 파일 위치 보기">📂 위치 보기</button>
+              <button id="skip-btn" hidden>🙈 폴더 넘기기</button>
             </div>
           </div>
         </div>
@@ -378,6 +381,14 @@ function toast(t) {
   toastTimer = setTimeout(() => $("toast").classList.remove("on"), 2200);
 }
 function keptKey(item) { return "kept:" + rootId + "/" + item.rel + ":" + item.size; }
+const skipKey = (folder) => "skipdir:" + rootId + "/" + folder;
+function isSkipped(item) {
+  try {
+    const parts = item.rel.split("/");
+    for (let i = 1; i < parts.length; i++) if (localStorage.getItem(skipKey(parts.slice(0, i).join("/"))) === "1") return true;
+  } catch {}
+  return false;
+}
 function isKept(item) { try { return localStorage.getItem(keptKey(item)) === "1"; } catch { return false; } }
 function setKept(item, on) {
   try { on ? localStorage.setItem(keptKey(item), "1") : localStorage.removeItem(keptKey(item)); } catch {}
@@ -396,7 +407,7 @@ const TONE = {
 };
 const RULES = [
   // 이름에 중요한 단어가 있으면 확장자보다 먼저 봐요 (포트폴리오 PDF를 영수증 취급하면 안 되니까요)
-  { test: (n) => /포트폴리오|portfolio|이력서|resume|\bcv\b|자기소개서|자소서|경력기술서|경력증명/i.test(n), icon: "⭐", tone: "design", tag: "취업 서류", verdict: "keep",
+  { test: (n) => /포트폴리오|포폴|portfolio|이력서|resume|\bcv\b|자기소개서|자소서|경력기술서|경력증명/i.test(n), icon: "⭐", tone: "design", tag: "취업 서류", verdict: "keep",
     text: "포트폴리오나 이력서 같은 취업 서류예요. 같은 내용의 최신 버전이 따로 있는 게 아니라면 남겨두세요." },
   { test: (n) => /계약서|증명서|등본|초본|성적|졸업|재학|통장|여권|신분증|자격증|합격|certificate|contract|transcript/i.test(n), icon: "📌", tone: "doc", tag: "중요 서류", verdict: "keep",
     text: "계약서나 증명서 같은 중요한 서류 같아요. 다시 받기 번거로울 수 있으니 남겨두는 게 좋아요." },
@@ -404,6 +415,8 @@ const RULES = [
     text: "영수증이나 결제 내역 같아요. 환불·정산이 끝났다면 버려도 돼요." },
   { test: (n) => /공고|채용|모집|안내문|notice/i.test(n), icon: "📢", tone: "doc", tag: "공고·안내", verdict: "check",
     text: "공고문이나 안내문 같아요. 지원이나 일정이 끝났다면 버려도 돼요." },
+  { test: (n) => /\.(ttf|otf|woff2?|ttc|eot)$/i.test(n), icon: "🔤", tone: "design", tag: "글꼴", verdict: "trash",
+    text: "글꼴(폰트) 파일이에요. 더블클릭해서 설치했다면 컴퓨터가 따로 보관하니까 이 파일은 지워도 돼요. 아직 설치 안 했고 쓸 거라면 남겨두세요." },
   { test: (n) => /\.(crdownload|download|part)$/i.test(n), icon: "⏳", tone: "etc", tag: "덜 받은 파일", verdict: "trash",
     text: "다운로드하다 멈춘 반쪽짜리 파일이에요. 열리지도 않고, 필요하면 다시 받으면 되니까 지워도 돼요." },
   // 설치 파일은 컴퓨터 종류에 따라 설명이 반대가 돼요
@@ -453,10 +466,28 @@ const RULES = [
 const dupKey = (name, size) => name.replace(/ \(\d+\)(?=\.[^.]+$)/, "") + ":" + size;
 
 const UNKNOWN = { icon: "❓", tone: "etc", tag: "모르는 파일", verdict: "check", text: "이름만으로는 알기 어려워요. 열어보고 정하세요." };
-const hasRule = (item) => RULES.some((r) => r.test(item.name));
+const JOB_FOLDER = /포폴|포트폴리오|portfolio|지원 ?자료|자소서|이력서|취업|취준/i;
+const folderOf = (item) => (item.rel.includes("/") ? item.rel.slice(0, item.rel.lastIndexOf("/")) : "");
+// 넘길 때는 맨 위 폴더 단위로 넘겨요 (영상편집/요리 → 영상편집 전체)
+const topFolderOf = (item) => (item.rel.includes("/") ? item.rel.split("/")[0] : "");
+function baseRule(item) {
+  if (item.isDir) {
+    return { icon: "🔤", tone: "design", tag: "글꼴 묶음", verdict: "trash",
+      text: `글꼴 파일 ${item.fonts}개가 든 폴더예요. 글꼴은 설치하면 컴퓨터가 따로 보관해서, 설치를 끝냈다면 이 폴더는 통째로 지워도 돼요. 웹사이트 작업에 쓰는 중이라면 남겨두세요.` };
+  }
+  const byName = RULES.find((r) => r.test(item.name));
+  const folder = folderOf(item);
+  // 직접 정리해둔 취업 폴더 안의 파일은, 확실한 쓰레기(설치 파일 등)가 아니면 남기기를 추천해요
+  if (JOB_FOLDER.test(folder) && (!byName || byName.verdict !== "trash")) {
+    return { icon: "⭐", tone: "design", tag: "취업 폴더", verdict: "keep",
+      text: `'${folder}' 폴더에 있는 파일이에요. 취업 준비 자료를 모아둔 곳 같아서 남겨두는 걸 추천해요. 같은 파일의 옛날 버전이라면 지워도 돼요.` };
+  }
+  return byName || null;
+}
+const hasRule = (item) => !!baseRule(item);
 
 function describe(item, dupes) {
-  let rule = RULES.find((r) => r.test(item.name));
+  let rule = baseRule(item);
   const chips = [];
   if (!rule) {
     const ai = aiCached(item);
@@ -473,7 +504,12 @@ function describe(item, dupes) {
   let text = rule.text;
   chips.unshift({ label: rule.tag });
 
-  const others = (dupes.get(dupKey(item.name, item.size)) || []).filter((t) => t !== item && !t.trashed);
+  if (item.unzipped) {
+    chips.push({ label: "📂 이미 풀어둔 게 있어요", kind: "trash" });
+    text += " 바로 옆에 이미 풀어둔 폴더(파일)가 있어서, 이 압축 파일은 지워도 돼요.";
+    verdict = "trash";
+  }
+  const others = item.isDir ? [] : (dupes.get(dupKey(item.name, item.size)) || []).filter((t) => t !== item && !t.trashed);
   if (others.length) {
     chips.push({ label: "👯 쌍둥이 있음", kind: "trash" });
     text += ` 크기까지 똑같은 "${others[0].name}"이 또 있어요.`;
@@ -538,15 +574,32 @@ async function prefetchAI() {
 }
 
 // ---------- 정렬: 큰 파일부터 / 오래된 것부터 ----------
-const SORT_LABEL = { size: "큰 파일부터", old: "오래된 것부터" };
-let sortMode = "size";
-try { if (SORT_LABEL[localStorage.getItem("sort")]) sortMode = localStorage.getItem("sort"); } catch {}
+const SORT_LABEL = { smart: "추천순", size: "큰 파일부터", old: "오래된 것부터" };
+const SORT_TOAST = {
+  smart: "✨ 버려도 될 것 같은 파일부터 보여줄게요",
+  size: "📏 남은 카드를 큰 파일부터 보여줄게요",
+  old: "🕰️ 남은 카드를 오래된 것부터 보여줄게요",
+};
+let sortMode = "smart";
+try { if (SORT_LABEL[localStorage.getItem("sort2")]) sortMode = localStorage.getItem("sort2"); } catch {}
+// 추천 점수: 버려도 될 것 같을수록, 클수록, 오래 방치됐을수록 앞으로.
+// 직접 만든 하위 폴더 안의 파일은 정리해둔 것일 가능성이 높아서 조금 뒤로 보내요.
+const VERDICT_WEIGHT = { trash: 3, check: 1.2, keep: 0.15 };
+function score(f) {
+  const d = describe(f, dupes);
+  const months = (Date.now() - f.mtime) / (30 * 86400000);
+  return VERDICT_WEIGHT[d.verdict] * (1 + Math.log10(f.size / 1024 + 1)) * (f.rel.includes("/") ? 0.6 : 1) * (months >= 6 ? 1.3 : 1);
+}
 function sortQueue(list) {
+  if (sortMode === "smart") {
+    const scores = new Map(list.map((f) => [f, score(f)]));
+    return list.sort((a, b) => scores.get(b) - scores.get(a));
+  }
   return list.sort(sortMode === "old" ? (a, b) => a.mtime - b.mtime : (a, b) => b.size - a.size);
 }
 function setSort(mode) {
   sortMode = mode;
-  try { localStorage.setItem("sort", mode); } catch {}
+  try { localStorage.setItem("sort2", mode); } catch {}
   appRoot.querySelectorAll("#sorts button").forEach((b) => b.classList.toggle("on", b.dataset.sort === mode));
 }
 setSort(sortMode);
@@ -577,7 +630,7 @@ async function pickRoot(id, name) {
   const all = [...files].sort((a, b) => b.size - a.size);
   const totalSize = all.reduce((sum, f) => sum + f.size, 0) || 1;
   all.forEach((f, i) => { f.rank = i + 1; f.share = f.size / totalSize; });
-  queue = sortQueue(all.filter((f) => !isKept(f)));
+  queue = sortQueue(all.filter((f) => !isKept(f) && !isSkipped(f)));
   total = queue.length;
   history = [];
   $("undo-btn").disabled = true;
@@ -628,7 +681,7 @@ async function renderFacts(item) {
   const facts = [];
   if (item.rank) {
     const pct = item.share >= 0.01 ? ` · 전체 용량의 ${Math.round(item.share * 100)}%` : "";
-    facts.push(["📏", `${rootName} 폴더에서 ${item.rank}번째로 큰 파일${pct}`]);
+    facts.push(["📏", `${rootName} 폴더에서 ${item.rank}번째로 큰 ${item.isDir ? "항목" : "파일"}${pct}`]);
   }
   const add = () => {
     list.innerHTML = "";
@@ -659,12 +712,16 @@ function render(item) {
   const d = describe(item, dupes);
   const dot = item.name.lastIndexOf(".");
   $("c-photo").style.setProperty("--tone", d.tone);
-  $("c-ext").textContent = dot > 0 ? item.name.slice(dot + 1).toUpperCase().slice(0, 6) : "파일";
+  $("c-ext").textContent = item.isDir ? "폴더" : dot > 0 ? item.name.slice(dot + 1).toUpperCase().slice(0, 6) : "파일";
   $("c-icon").textContent = d.icon;
   $("c-badge").textContent = d.badge;
   $("c-name").textContent = item.name;
   $("c-name").title = item.name;
-  $("c-size").textContent = `${fmtSize(item.size)} · ${fmtAge(item.mtime)}`;
+  $("c-size").textContent = item.isDir
+    ? `${fmtSize(item.size)} · 파일 ${item.count}개 · ${fmtAge(item.mtime)}`
+    : `${fmtSize(item.size)} · ${fmtAge(item.mtime)}`;
+  $("skip-btn").hidden = !folderOf(item);
+  $("skip-btn").title = topFolderOf(item) ? `'${topFolderOf(item)}' 폴더 안의 파일은 그만 보기` : "";
   const folder = item.rel.includes("/") ? item.rel.slice(0, item.rel.lastIndexOf("/")) : "";
   $("c-where").textContent = "📂 " + rootName + (folder ? "/" + folder : "");
   $("c-explain").textContent = d.text;
@@ -791,6 +848,11 @@ async function undo() {
       sent -= item.size;
       updateSent();
       toast("↩ 휴지통에서 꺼내왔어요");
+    } else if (action === "skipdir") {
+      try { localStorage.removeItem(skipKey(last.folder)); } catch {}
+      queue.push(...last.removed);
+      sortQueue(queue);
+      toast("↩ 폴더 넘기기를 취소했어요");
     } else {
       setKept(item, false);
       toast("↩ 남기기를 취소했어요");
@@ -800,6 +862,7 @@ async function undo() {
     render(item);
     show("v-card");
     await flyIn(action === "trash" ? -1 : 1);
+    prefetchAI();
   } catch (err) {
     history.push(last);
     toast("되돌리지 못했어요: " + err.message);
@@ -819,7 +882,24 @@ async function peek(reveal) {
   }
 }
 
+// ---------- 폴더 통째로 넘기기 ----------
+// 영상편집·포폴처럼 직접 정리해둔 폴더는 한 번에 건너뛰어요. 다음에 열어도 안 보여요.
+function skipFolder() {
+  if (!current || busy) return;
+  const folder = topFolderOf(current);
+  if (!folder) return;
+  try { localStorage.setItem(skipKey(folder), "1"); } catch {}
+  const inside = (f) => f.rel.startsWith(folder + "/");
+  const removed = queue.filter(inside);
+  queue = queue.filter((f) => !inside(f));
+  history.push({ item: current, action: "skipdir", folder, removed });
+  $("undo-btn").disabled = false;
+  toast(`🙈 '${folder}' 폴더는 그만 볼게요 (${removed.length + 1}장 건너뜀)`);
+  next();
+}
+
 // ---------- 연결 ----------
+$("skip-btn").addEventListener("click", skipFolder);
 $("open-btn").addEventListener("click", () => peek(false));
 $("reveal-btn").addEventListener("click", () => peek(true));
 document.querySelectorAll("#folders .folder").forEach((btn) =>
@@ -828,10 +908,10 @@ document.querySelectorAll("#folders .folder").forEach((btn) =>
 appRoot.querySelectorAll("#sorts button").forEach((b) => b.addEventListener("click", () => setSort(b.dataset.sort)));
 // 넘기는 중에도 위쪽 "큰 파일부터 ⇅"를 누르면 남은 카드 순서가 바뀌어요
 $("xp-left").addEventListener("click", () => {
-  setSort(sortMode === "size" ? "old" : "size");
+  setSort({ smart: "size", size: "old", old: "smart" }[sortMode]);
   sortQueue(queue);
   if (current) render(current);
-  toast(sortMode === "size" ? "📏 남은 카드를 큰 파일부터 보여줄게요" : "🕰️ 남은 카드를 오래된 것부터 보여줄게요");
+  toast(SORT_TOAST[sortMode]);
   prefetchAI();
 });
 $("again-btn").addEventListener("click", () => show("v-start"));

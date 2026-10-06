@@ -183,7 +183,8 @@ const win = {
     const out = await ps(
       "Add-Type -AssemblyName Microsoft.VisualBasic;" +
         "$p=$env:FT_PATH;" +
-        "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p,'OnlyErrorDialogs','SendToRecycleBin');" +
+        "if(Test-Path -LiteralPath $p -PathType Container){[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p,'OnlyErrorDialogs','SendToRecycleBin')}" +
+        "else{[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p,'OnlyErrorDialogs','SendToRecycleBin')};" +
         "$dir=[IO.Path]::GetDirectoryName($p);$name=[IO.Path]::GetFileName($p);" +
         "$base=[IO.Path]::GetFileNameWithoutExtension($p);$ext=[IO.Path]::GetExtension($p);" +
         "$rb=(New-Object -ComObject Shell.Application).NameSpace(10);" +
